@@ -9,9 +9,14 @@ async function getClients(token: string) {
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error(`[getClients] API returned ${res.status}: ${body}`);
+      return [];
+    }
     return res.json();
-  } catch {
+  } catch (err) {
+    console.error('[getClients] fetch failed:', err instanceof Error ? err.message : err);
     return [];
   }
 }
