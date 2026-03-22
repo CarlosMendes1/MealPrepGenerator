@@ -1,39 +1,28 @@
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/auth-helpers-nextjs';
 import { redirect } from 'next/navigation';
 import { Users, Utensils, MessageSquare, TrendingUp } from 'lucide-react';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 
-async function getStats(token: string) {
+async function getClients(token: string) {
   const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
   try {
     const res = await fetch(`${API_URL}/api/clients`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
     });
-    if (!res.ok) return null;
+    if (!res.ok) return [];
     return res.json();
   } catch {
-    return null;
+    return [];
   }
 }
 
 export default async function DashboardPage() {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (name) => cookieStore.get(name)?.value } }
-  );
-
+  const supabase = await createServerSupabaseClient();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) redirect('/login');
 
-  const clients = await getStats(session.access_token);
+  const clients = await getClients(session.access_token);
   const clientCount = Array.isArray(clients) ? clients.length : 0;
-
-  const pendingFeedback = Array.isArray(clients)
-    ? clients.reduce((acc: number, c: any) => acc + (c.meals?.[0]?.count ?? 0), 0)
-    : 0;
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -50,12 +39,11 @@ export default async function DashboardPage() {
         <p className="text-gray-500 text-sm mt-1">Aqui está o resumo de hoje</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
           { label: 'Clientes ativos', value: clientCount, icon: <Users size={20} className="text-brand-600" />, bg: 'bg-brand-50' },
           { label: 'Refeições hoje', value: '—', icon: <Utensils size={20} className="text-blue-600" />, bg: 'bg-blue-50' },
-          { label: 'Feedback pendente', value: pendingFeedback, icon: <MessageSquare size={20} className="text-amber-600" />, bg: 'bg-amber-50' },
+          { label: 'Feedback pendente', value: '—', icon: <MessageSquare size={20} className="text-amber-600" />, bg: 'bg-amber-50' },
           { label: 'Taxa de adesão média', value: '—', icon: <TrendingUp size={20} className="text-purple-600" />, bg: 'bg-purple-50' },
         ].map((stat) => (
           <div key={stat.label} className="bg-white rounded-xl border border-gray-100 p-5">
@@ -68,7 +56,6 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      {/* Recent clients */}
       <div className="bg-white rounded-xl border border-gray-100">
         <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">Clientes recentes</h2>

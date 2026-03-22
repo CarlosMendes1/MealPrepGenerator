@@ -1,8 +1,7 @@
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/auth-helpers-nextjs';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Users, Plus, Copy } from 'lucide-react';
+import { Users } from 'lucide-react';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import InviteButton from './InviteButton';
 
 async function getClients(token: string) {
@@ -16,13 +15,7 @@ async function getClients(token: string) {
 }
 
 export default async function ClientsPage() {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (name) => cookieStore.get(name)?.value } }
-  );
-
+  const supabase = await createServerSupabaseClient();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) redirect('/login');
 
@@ -44,7 +37,6 @@ export default async function ClientsPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-2">Sem clientes ainda</h2>
           <p className="text-gray-500 text-sm mb-6">
             Gere um código de convite e partilhe com os seus clientes.
-            Eles instalam a app e ligam-se à sua conta.
           </p>
           <InviteButton token={session.access_token} variant="primary" />
         </div>

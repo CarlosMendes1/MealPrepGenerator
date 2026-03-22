@@ -1,9 +1,8 @@
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/auth-helpers-nextjs';
 import { redirect, notFound } from 'next/navigation';
 import Image from 'next/image';
 import { ArrowLeft, Target, Weight, Ruler, Percent } from 'lucide-react';
 import Link from 'next/link';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import FeedbackEditor from './FeedbackEditor';
 
 async function getClientData(clientId: string, token: string) {
@@ -30,18 +29,13 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   sent: { label: 'Feedback enviado', color: 'bg-brand-100 text-brand-700' },
 };
 
-export default async function ClientDetailPage({ params }: { params: { id: string } }) {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (name) => cookieStore.get(name)?.value } }
-  );
-
+export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createServerSupabaseClient();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) redirect('/login');
 
-  const data = await getClientData(params.id, session.access_token);
+  const data = await getClientData(id, session.access_token);
   if (!data) notFound();
 
   const { profile, meals } = data;
@@ -52,7 +46,6 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
         <ArrowLeft size={15} /> Todos os clientes
       </Link>
 
-      {/* Client header */}
       <div className="bg-white rounded-xl border border-gray-100 p-6 mb-6">
         <div className="flex items-center gap-4 mb-6">
           <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-xl">
@@ -81,7 +74,6 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
         </div>
       </div>
 
-      {/* Meals feed */}
       <h2 className="font-semibold text-gray-900 mb-4">Refeições ({meals.length})</h2>
 
       {meals.length === 0 ? (
@@ -97,17 +89,10 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
             return (
               <div key={meal.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                 <div className="flex gap-4 p-4">
-                  {/* Photo */}
                   <div className="w-24 h-24 relative rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                    <Image
-                      src={meal.photo_url}
-                      alt="Refeição"
-                      fill
-                      className="object-cover"
-                    />
+                    <Image src={meal.photo_url} alt="Refeição" fill className="object-cover" />
                   </div>
 
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="font-medium text-sm text-gray-900">
@@ -143,7 +128,6 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                   </div>
                 </div>
 
-                {/* AI analysis summary */}
                 {analysis?.summary && (
                   <div className="px-4 pb-2">
                     <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
@@ -153,7 +137,6 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                   </div>
                 )}
 
-                {/* Foods identified */}
                 {analysis?.foods?.length > 0 && (
                   <div className="px-4 pb-2">
                     <div className="flex flex-wrap gap-1.5">
@@ -166,7 +149,6 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                   </div>
                 )}
 
-                {/* Feedback editor */}
                 <FeedbackEditor
                   mealId={meal.id}
                   aiDraft={meal.ai_feedback_draft}
