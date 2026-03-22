@@ -11,6 +11,7 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState(false);
 
   function update(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -27,9 +28,16 @@ export default function RegisterPage() {
       password: form.password,
     });
 
-    if (authError || !data.session) {
+    if (authError || !data.user) {
       setError(authError?.message ?? 'Erro ao criar conta. Tente novamente.');
       setLoading(false);
+      return;
+    }
+
+    // Session is null when email confirmation is required
+    if (!data.session) {
+      setLoading(false);
+      setConfirmEmail(true);
       return;
     }
 
@@ -45,6 +53,24 @@ export default function RegisterPage() {
     }
 
     router.push('/dashboard');
+  }
+
+  if (confirmEmail) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 w-full max-w-md text-center">
+          <div className="text-4xl mb-4">📬</div>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">Confirme o seu email</h1>
+          <p className="text-gray-500 text-sm mb-6">
+            Enviámos um link de confirmação para <strong>{form.email}</strong>.<br />
+            Clique no link para ativar a sua conta.
+          </p>
+          <Link href="/login" className="text-brand-600 text-sm font-medium hover:underline">
+            Ir para o login
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
