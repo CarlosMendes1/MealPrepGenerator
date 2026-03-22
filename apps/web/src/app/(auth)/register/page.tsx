@@ -26,6 +26,10 @@ export default function RegisterPage() {
     const { data, error: authError } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
+      options: {
+        // Stored in auth.users.raw_user_meta_data — useful for DB triggers that auto-create profiles
+        data: { full_name: form.name.trim(), role: 'nutritionist' },
+      },
     });
 
     if (authError || !data.user) {

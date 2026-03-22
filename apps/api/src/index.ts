@@ -3,6 +3,21 @@ import 'express-async-errors';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+
+// ── Fail fast on missing required config ──────────────────────────────────────
+const REQUIRED_ENV = [
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'ANTHROPIC_API_KEY',
+] as const;
+
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    console.error(`[startup] Missing required environment variable: ${key}`);
+    process.exit(1);
+  }
+}
 
 import profileRouter from './routes/profile.js';
 import clientsRouter from './routes/clients.js';
@@ -10,28 +25,90 @@ import mealsRouter from './routes/meals.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
+const IS_PROD = process.env.NODE_ENV === 'production';
 
+// ── Trust proxy (nginx / cloud load balancers) ─────────────────────────────
+// Required for rate limiting to see real client IPs, not the proxy IP.
+app.set('trust proxy', 1);
+
+// ── Security headers (helmet) ──────────────────────────────────────────────
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN ?? '*' }));
-app.use(express.json());
 
-// Health check
+// ── CORS ───────────────────────────────────────────────────────────────────
+// Explicit allowlist — no wildcard in production.
+const ALLOWED_ORIGINS: string[] = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+  : ['http://localhost:3000'];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Requests with no Origin header (same-origin, server-to-server).
+      // Reject in production; allow in development.
+      if (!origin) {
+        IS_PROD ? callback(new Error('Origin required')) : callback(null, true);
+        return;
+      }
+      if (ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin '${origin}' not allowed`));
+      }
+    },
+    credentials: true,
+  })
+);
+
+// ── Body parsing with strict size limits ──────────────────────────────────
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+
+// ── Rate limiting ─────────────────────────────────────────────────────────
+// Global: 200 req / 15 min per IP.
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 200,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+});
+
+// AI endpoints are expensive — tighter limit: 30 req / 15 min per IP.
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many AI requests. Please try again later.' },
+});
+
+app.use(globalLimiter);
+
+// ── Health check (unauthenticated, no rate limit side-effect) ─────────────
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'nutridesk-api', timestamp: new Date().toISOString() });
 });
 
+// ── Routes ────────────────────────────────────────────────────────────────
 app.use('/api/profile', profileRouter);
 app.use('/api/clients', clientsRouter);
-app.use('/api/meals', mealsRouter);
+app.use('/api/meals', aiLimiter, mealsRouter);
 
-// Global error handler
+// ── Global error handler — never leak stack traces to clients ─────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err);
-  res.status(500).json({ error: 'Internal server error' });
+  const requestId = crypto.randomUUID();
+  // Structured log for observability tools (Datadog, Logtail, etc.)
+  console.error(JSON.stringify({
+    requestId,
+    message: err.message,
+    stack: IS_PROD ? undefined : err.stack,
+    timestamp: new Date().toISOString(),
+  }));
+  res.status(500).json({ error: 'Internal server error', requestId });
 });
 
 app.listen(PORT, () => {
-  console.log(`🥗 NutriDesk API running on http://localhost:${PORT}`);
+  console.log(`NutriDesk API running on port ${PORT} [${IS_PROD ? 'production' : 'development'}]`);
 });
 
 export default app;

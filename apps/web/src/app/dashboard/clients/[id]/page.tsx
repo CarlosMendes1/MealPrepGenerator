@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation';
 import Image from 'next/image';
 import { ArrowLeft, Target, Weight, Ruler, Percent } from 'lucide-react';
 import Link from 'next/link';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { getAuthenticatedUser } from '@/lib/supabase-server';
 import FeedbackEditor from './FeedbackEditor';
 
 async function getClientData(clientId: string, token: string) {
@@ -31,7 +31,9 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createServerSupabaseClient();
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) redirect('/login');
+
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) redirect('/login');
 

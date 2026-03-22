@@ -1,16 +1,18 @@
 import { redirect } from 'next/navigation';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { getAuthenticatedUser } from '@/lib/supabase-server';
 import SettingsForm from './SettingsForm';
 
 export default async function SettingsPage() {
-  const supabase = await createServerSupabaseClient();
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) redirect('/login');
+
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) redirect('/login');
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('*')
-    .eq('user_id', session.user.id)
+    .select('user_id, full_name, role, goal, created_at')
+    .eq('user_id', user.id)
     .single();
 
   return (

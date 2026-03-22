@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { Users, Utensils, MessageSquare, TrendingUp } from 'lucide-react';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { getAuthenticatedUser } from '@/lib/supabase-server';
 
 async function getClients(token: string) {
   const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -17,7 +17,10 @@ async function getClients(token: string) {
 }
 
 export default async function DashboardPage() {
-  const supabase = await createServerSupabaseClient();
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) redirect('/login');
+
+  // Fetch session to get the access token for the API call
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) redirect('/login');
 
@@ -27,7 +30,7 @@ export default async function DashboardPage() {
   const { data: profile } = await supabase
     .from('profiles')
     .select('full_name')
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .single();
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'Nutricionista';

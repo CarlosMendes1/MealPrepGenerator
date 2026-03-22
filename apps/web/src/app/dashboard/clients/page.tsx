@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Users } from 'lucide-react';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { getAuthenticatedUser } from '@/lib/supabase-server';
 import InviteButton from './InviteButton';
 
 async function getClients(token: string) {
@@ -15,7 +15,9 @@ async function getClients(token: string) {
 }
 
 export default async function ClientsPage() {
-  const supabase = await createServerSupabaseClient();
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) redirect('/login');
+
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) redirect('/login');
 
