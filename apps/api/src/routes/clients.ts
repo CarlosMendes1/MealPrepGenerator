@@ -26,17 +26,30 @@ router.get('/', requireAuth, requireRole('nutritionist'), async (req: AuthReques
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('user_id, full_name, age, weight_kg, goal, created_at, meals(count)')
+    .select('user_id, full_name, age, weight_kg, goal, created_at')
     .eq('nutritionist_id', req.userId!)
     .eq('role', 'client')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) {
+    console.error('[GET /clients] Supabase error:', error.message);
     res.status(500).json({ error: 'Failed to fetch clients' });
     return;
   }
-  res.json(data);
+
+  // Fetch meal counts per client in parallel
+  const clientsWithCounts = await Promise.all(
+    (data ?? []).map(async (client) => {
+      const { count } = await supabase
+        .from('meals')
+        .select('*', { count: 'exact', head: true })
+        .eq('client_id', client.user_id);
+      return { ...client, meals: [{ count: count ?? 0 }] };
+    })
+  );
+
+  res.json(clientsWithCounts);
 });
 
 // ── GET /clients/:clientId — client detail + recent meals ──────────────────
