@@ -2,22 +2,35 @@ import { redirect } from 'next/navigation';
 import { Users, Utensils, MessageSquare, TrendingUp } from 'lucide-react';
 import { getAuthenticatedUser } from '@/lib/supabase-server';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
 async function getClients(token: string) {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
   try {
     const res = await fetch(`${API_URL}/api/clients`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      console.error(`[getClients] API returned ${res.status}: ${body}`);
+      console.error(`[getClients] API returned ${res.status}`);
       return [];
     }
     return res.json();
   } catch (err) {
     console.error('[getClients] fetch failed:', err instanceof Error ? err.message : err);
     return [];
+  }
+}
+
+async function getDashboardStats(token: string) {
+  try {
+    const res = await fetch(`${API_URL}/api/dashboard/stats`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return res.json() as Promise<{ meals_today: number; pending_feedback: number; avg_adherence: number | null }>;
+  } catch {
+    return null;
   }
 }
 
@@ -29,7 +42,10 @@ export default async function DashboardPage() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) redirect('/login');
 
-  const clients = await getClients(session.access_token);
+  const [clients, stats] = await Promise.all([
+    getClients(session.access_token),
+    getDashboardStats(session.access_token),
+  ]);
   const clientCount = Array.isArray(clients) ? clients.length : 0;
 
   const { data: profile } = await supabase
@@ -50,9 +66,9 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
           { label: 'Clientes ativos', value: clientCount, icon: <Users size={20} className="text-brand-600" />, bg: 'bg-brand-50' },
-          { label: 'Refeições hoje', value: '—', icon: <Utensils size={20} className="text-blue-600" />, bg: 'bg-blue-50' },
-          { label: 'Feedback pendente', value: '—', icon: <MessageSquare size={20} className="text-amber-600" />, bg: 'bg-amber-50' },
-          { label: 'Taxa de adesão média', value: '—', icon: <TrendingUp size={20} className="text-purple-600" />, bg: 'bg-purple-50' },
+          { label: 'Refeições hoje', value: stats?.meals_today ?? '—', icon: <Utensils size={20} className="text-blue-600" />, bg: 'bg-blue-50' },
+          { label: 'Feedback pendente', value: stats?.pending_feedback ?? '—', icon: <MessageSquare size={20} className="text-amber-600" />, bg: 'bg-amber-50' },
+          { label: 'Adesão média (7d)', value: stats?.avg_adherence != null ? `${stats.avg_adherence}/10` : '—', icon: <TrendingUp size={20} className="text-purple-600" />, bg: 'bg-purple-50' },
         ].map((stat) => (
           <div key={stat.label} className="bg-white rounded-xl border border-gray-100 p-5">
             <div className={`${stat.bg} w-10 h-10 rounded-lg flex items-center justify-center mb-3`}>

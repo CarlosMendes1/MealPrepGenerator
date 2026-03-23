@@ -22,6 +22,7 @@ for (const key of REQUIRED_ENV) {
 import profileRouter from './routes/profile.js';
 import clientsRouter from './routes/clients.js';
 import mealsRouter from './routes/meals.js';
+import dashboardRouter from './routes/dashboard.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -93,6 +94,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/profile', profileRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/meals', aiLimiter, mealsRouter);
+app.use('/api/dashboard', dashboardRouter);
 
 // ── Global error handler — never leak stack traces to clients ─────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

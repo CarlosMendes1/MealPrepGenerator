@@ -58,7 +58,7 @@ router.get('/:clientId', requireAuth, requireRole('nutritionist'), async (req: A
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('user_id, full_name, age, weight_kg, height_cm, body_fat_pct, goal, created_at')
+    .select('user_id, full_name, age, weight_kg, height_cm, body_fat_pct, goal, allergies, intolerances, dietary_preferences, lifestyle_notes, created_at')
     .eq('user_id', clientId)
     .eq('nutritionist_id', req.userId!)
     .single();
@@ -175,6 +175,125 @@ router.post('/join', requireAuth, requireRole('client'), async (req: AuthRequest
     .eq('id', invite.id);
 
   res.json({ message: 'Successfully linked to nutritionist' });
+});
+
+// ── Notes: shared helpers ──────────────────────────────────────────────────
+const noteSchema = z.object({
+  content: z.string().min(1).max(2000).trim(),
+});
+
+// ── GET /clients/:clientId/notes ───────────────────────────────────────────
+router.get('/:clientId/notes', requireAuth, requireRole('nutritionist'), async (req: AuthRequest, res) => {
+  const { clientId } = req.params;
+
+  // Verify client belongs to this nutritionist
+  const { data: check } = await supabase
+    .from('profiles')
+    .select('user_id')
+    .eq('user_id', clientId)
+    .eq('nutritionist_id', req.userId!)
+    .single();
+
+  if (!check) {
+    res.status(404).json({ error: 'Client not found' });
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('nutritionist_notes')
+    .select('id, content, created_at, updated_at')
+    .eq('nutritionist_id', req.userId!)
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    res.status(500).json({ error: 'Failed to fetch notes' });
+    return;
+  }
+
+  res.json(data ?? []);
+});
+
+// ── POST /clients/:clientId/notes ──────────────────────────────────────────
+router.post('/:clientId/notes', requireAuth, requireRole('nutritionist'), async (req: AuthRequest, res) => {
+  const { clientId } = req.params;
+
+  const parsed = noteSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const { data: check } = await supabase
+    .from('profiles')
+    .select('user_id')
+    .eq('user_id', clientId)
+    .eq('nutritionist_id', req.userId!)
+    .single();
+
+  if (!check) {
+    res.status(404).json({ error: 'Client not found' });
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('nutritionist_notes')
+    .insert({ nutritionist_id: req.userId!, client_id: clientId, content: parsed.data.content })
+    .select('id, content, created_at, updated_at')
+    .single();
+
+  if (error) {
+    res.status(500).json({ error: 'Failed to create note' });
+    return;
+  }
+
+  res.status(201).json(data);
+});
+
+// ── PATCH /clients/:clientId/notes/:noteId ─────────────────────────────────
+router.patch('/:clientId/notes/:noteId', requireAuth, requireRole('nutritionist'), async (req: AuthRequest, res) => {
+  const { clientId, noteId } = req.params;
+
+  const parsed = noteSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('nutritionist_notes')
+    .update({ content: parsed.data.content, updated_at: new Date().toISOString() })
+    .eq('id', noteId)
+    .eq('nutritionist_id', req.userId!)
+    .eq('client_id', clientId)
+    .select('id, content, created_at, updated_at')
+    .single();
+
+  if (error || !data) {
+    res.status(404).json({ error: 'Note not found' });
+    return;
+  }
+
+  res.json(data);
+});
+
+// ── DELETE /clients/:clientId/notes/:noteId ────────────────────────────────
+router.delete('/:clientId/notes/:noteId', requireAuth, requireRole('nutritionist'), async (req: AuthRequest, res) => {
+  const { clientId, noteId } = req.params;
+
+  const { error } = await supabase
+    .from('nutritionist_notes')
+    .delete()
+    .eq('id', noteId)
+    .eq('nutritionist_id', req.userId!)
+    .eq('client_id', clientId);
+
+  if (error) {
+    res.status(500).json({ error: 'Failed to delete note' });
+    return;
+  }
+
+  res.status(204).end();
 });
 
 export default router;

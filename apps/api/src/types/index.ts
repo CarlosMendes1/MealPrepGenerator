@@ -23,9 +23,28 @@ export interface UserProfile {
   height_cm?: number;
   body_fat_pct?: number;
   goal?: Goal;
+  allergies?: string;
+  intolerances?: string;
+  dietary_preferences?: string;
+  lifestyle_notes?: string;
   nutritionist_id?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface NutritionistNote {
+  id: string;
+  nutritionist_id: string;
+  client_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DashboardStats {
+  meals_today: number;
+  pending_feedback: number;
+  avg_adherence: number | null;
 }
 
 export interface Meal {

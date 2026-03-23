@@ -24,6 +24,10 @@ interface Profile {
   height_cm: number | null;
   body_fat_pct: number | null;
   goal: Goal | null;
+  allergies: string | null;
+  intolerances: string | null;
+  dietary_preferences: string | null;
+  lifestyle_notes: string | null;
   nutritionist_id: string | null;
 }
 
@@ -36,6 +40,10 @@ export default function ProfileScreen() {
     height_cm: '',
     body_fat_pct: '',
     goal: '' as Goal | '',
+    allergies: '',
+    intolerances: '',
+    dietary_preferences: '',
+    lifestyle_notes: '',
   });
   const [saving, setSaving] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
@@ -44,12 +52,16 @@ export default function ProfileScreen() {
     api.get<Profile>('/api/profile').then((p) => {
       setProfile(p);
       setForm({
-        full_name: p.full_name ?? '',
-        age: p.age?.toString() ?? '',
-        weight_kg: p.weight_kg?.toString() ?? '',
-        height_cm: p.height_cm?.toString() ?? '',
-        body_fat_pct: p.body_fat_pct?.toString() ?? '',
-        goal: p.goal ?? '',
+        full_name:            p.full_name ?? '',
+        age:                  p.age?.toString() ?? '',
+        weight_kg:            p.weight_kg?.toString() ?? '',
+        height_cm:            p.height_cm?.toString() ?? '',
+        body_fat_pct:         p.body_fat_pct?.toString() ?? '',
+        goal:                 p.goal ?? '',
+        allergies:            p.allergies ?? '',
+        intolerances:         p.intolerances ?? '',
+        dietary_preferences:  p.dietary_preferences ?? '',
+        lifestyle_notes:      p.lifestyle_notes ?? '',
       });
     });
   }, []);
@@ -62,12 +74,16 @@ export default function ProfileScreen() {
     setSaving(true);
     try {
       await api.patch('/api/profile', {
-        full_name: form.full_name,
-        age: form.age ? parseInt(form.age) : undefined,
-        weight_kg: form.weight_kg ? parseFloat(form.weight_kg) : undefined,
-        height_cm: form.height_cm ? parseFloat(form.height_cm) : undefined,
-        body_fat_pct: form.body_fat_pct ? parseFloat(form.body_fat_pct) : undefined,
-        goal: form.goal || undefined,
+        full_name:           form.full_name,
+        age:                 form.age ? parseInt(form.age) : undefined,
+        weight_kg:           form.weight_kg ? parseFloat(form.weight_kg) : undefined,
+        height_cm:           form.height_cm ? parseFloat(form.height_cm) : undefined,
+        body_fat_pct:        form.body_fat_pct ? parseFloat(form.body_fat_pct) : undefined,
+        goal:                form.goal || undefined,
+        allergies:           form.allergies || undefined,
+        intolerances:        form.intolerances || undefined,
+        dietary_preferences: form.dietary_preferences || undefined,
+        lifestyle_notes:     form.lifestyle_notes || undefined,
       });
       Alert.alert('', 'Perfil atualizado!');
     } catch {
@@ -151,6 +167,35 @@ export default function ProfileScreen() {
                     {g.label}
                   </Text>
                 </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Dietary restrictions */}
+          <View className="bg-white rounded-2xl border border-gray-100 p-5 mb-4">
+            <Text className="font-semibold text-gray-900 mb-1">Restrições alimentares</Text>
+            <Text className="text-xs text-gray-400 mb-4">
+              Informação partilhada com o teu nutricionista.
+            </Text>
+            <View className="space-y-4">
+              {[
+                { label: 'Alergias', field: 'allergies' as const, placeholder: 'ex: amendoins, marisco' },
+                { label: 'Intolerâncias', field: 'intolerances' as const, placeholder: 'ex: lactose, glúten' },
+                { label: 'Preferências alimentares', field: 'dietary_preferences' as const, placeholder: 'ex: vegetariano, sem açúcar' },
+                { label: 'Horários / estilo de vida', field: 'lifestyle_notes' as const, placeholder: 'ex: trabalho por turnos, treino ao fim de tarde' },
+              ].map((input) => (
+                <View key={input.field}>
+                  <Text className="text-sm text-gray-500 mb-1.5">{input.label}</Text>
+                  <TextInput
+                    value={form[input.field]}
+                    onChangeText={update(input.field)}
+                    placeholder={input.placeholder}
+                    placeholderTextColor="#9ca3af"
+                    multiline={input.field === 'lifestyle_notes'}
+                    numberOfLines={input.field === 'lifestyle_notes' ? 2 : 1}
+                    className="border border-gray-200 rounded-xl px-4 py-3 text-sm"
+                  />
+                </View>
               ))}
             </View>
           </View>
