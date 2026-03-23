@@ -25,10 +25,13 @@ interface Profile {
 }
 
 const MEAL_LABELS: Record<string, string> = {
-  breakfast: 'Pequeno-almoço',
-  lunch: 'Almoço',
-  dinner: 'Jantar',
-  snack: 'Snack',
+  breakfast:       'Pequeno-almoço',
+  morning_snack:   'Lanche da manhã',
+  lunch:           'Almoço',
+  afternoon_snack: 'Lanche da tarde',
+  dinner:          'Jantar',
+  supper:          'Ceia',
+  snack:           'Snack',
 };
 
 export default function HomeScreen() {
@@ -55,6 +58,25 @@ export default function HomeScreen() {
   }
 
   useEffect(() => { load(); }, []);
+
+  // Realtime: patch meal in state when nutritionist sends feedback
+  useEffect(() => {
+    const channel = supabase
+      .channel('home-meals-feedback')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'meals' },
+        (payload) => {
+          const updated = payload.new as Meal;
+          setTodayMeals((prev) =>
+            prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
+          );
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

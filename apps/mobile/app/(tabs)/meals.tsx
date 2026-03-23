@@ -3,6 +3,7 @@ import { View, Text, ScrollView, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageSquare, Clock } from 'lucide-react-native';
 import { api } from '@/services/api';
+import { supabase } from '@/services/supabase';
 
 interface Meal {
   id: string;
@@ -119,6 +120,25 @@ export default function MealsScreen() {
   }
 
   useEffect(() => { load(); }, []);
+
+  // Realtime: patch meal in state when nutritionist sends feedback
+  useEffect(() => {
+    const channel = supabase
+      .channel('history-meals-feedback')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'meals' },
+        (payload) => {
+          const updated = payload.new as Meal;
+          setMeals((prev) =>
+            prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
+          );
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
