@@ -38,7 +38,15 @@ const upload = multer({
 });
 
 // ── Schemas ───────────────────────────────────────────────────────────────
-const mealTypeSchema = z.enum(['breakfast', 'lunch', 'dinner', 'snack']);
+const mealTypeSchema = z.enum([
+  'breakfast',
+  'morning_snack',
+  'lunch',
+  'afternoon_snack',
+  'dinner',
+  'supper',
+  'snack',
+]);
 
 const feedbackSchema = z.object({
   feedback: z.string().min(1).max(2000),
@@ -71,7 +79,7 @@ router.post(
 
     const mealType = mealTypeSchema.safeParse(req.body.meal_type);
     if (!mealType.success) {
-      res.status(400).json({ error: 'meal_type must be one of: breakfast, lunch, dinner, snack' });
+      res.status(400).json({ error: 'meal_type must be one of: breakfast, morning_snack, lunch, afternoon_snack, dinner, supper, snack' });
       return;
     }
 

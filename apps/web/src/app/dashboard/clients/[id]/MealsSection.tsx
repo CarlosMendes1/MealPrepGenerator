@@ -5,17 +5,42 @@ import Image from 'next/image';
 import { ChevronDown, ZoomIn, X } from 'lucide-react';
 import FeedbackEditor from './FeedbackEditor';
 
+// ── Meal type config ───────────────────────────────────────────────────────────
+
+const MEAL_TYPE_ORDER = [
+  'breakfast',
+  'morning_snack',
+  'lunch',
+  'afternoon_snack',
+  'dinner',
+  'supper',
+  'snack',
+];
+
 const MEAL_LABELS: Record<string, string> = {
-  breakfast: 'Pequeno-almoço',
-  lunch: 'Almoço',
-  dinner: 'Jantar',
-  snack: 'Snack',
+  breakfast:       'Pequeno-almoço',
+  morning_snack:   'Lanche da manhã',
+  lunch:           'Almoço',
+  afternoon_snack: 'Lanche da tarde',
+  dinner:          'Jantar',
+  supper:          'Ceia',
+  snack:           'Snack',
+};
+
+const MEAL_EMOJI: Record<string, string> = {
+  breakfast:       '🌅',
+  morning_snack:   '🍌',
+  lunch:           '☀️',
+  afternoon_snack: '🍎',
+  dinner:          '🌙',
+  supper:          '🌛',
+  snack:           '🥜',
 };
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending_ai: { label: 'A analisar...', color: 'bg-gray-100 text-gray-500' },
-  draft: { label: 'Rascunho pronto', color: 'bg-amber-100 text-amber-700' },
-  sent: { label: 'Feedback enviado', color: 'bg-brand-100 text-brand-700' },
+  draft:      { label: 'Rascunho pronto', color: 'bg-amber-100 text-amber-700' },
+  sent:       { label: 'Feedback enviado', color: 'bg-brand-100 text-brand-700' },
 };
 
 // ── Date helpers (local-time aware) ───────────────────────────────────────────
@@ -56,32 +81,57 @@ function formatDayLabel(dayKey: string): string {
   return d.toLocaleDateString('pt-PT', { weekday: 'long', day: '2-digit', month: 'long' });
 }
 
+// ── Grouping ───────────────────────────────────────────────────────────────────
+
 type Meal = Record<string, any>;
 
-interface WeekGroup {
-  weekStart: string;
-  days: { dayKey: string; meals: Meal[] }[];
-  totalMeals: number;
+interface TypeGroup { mealType: string; meals: Meal[] }
+interface DayGroup  { dayKey: string; typeGroups: TypeGroup[] }
+interface WeekGroup { weekStart: string; days: DayGroup[]; totalMeals: number }
+
+function sortByType(a: string, b: string): number {
+  const ia = MEAL_TYPE_ORDER.indexOf(a);
+  const ib = MEAL_TYPE_ORDER.indexOf(b);
+  if (ia === -1 && ib === -1) return a.localeCompare(b);
+  if (ia === -1) return 1;
+  if (ib === -1) return -1;
+  return ia - ib;
 }
 
-function groupByWeekAndDay(meals: Meal[]): WeekGroup[] {
-  const map: Record<string, Record<string, Meal[]>> = {};
+function groupMeals(meals: Meal[]): WeekGroup[] {
+  // week → day → mealType → Meal[]
+  const map: Record<string, Record<string, Record<string, Meal[]>>> = {};
 
   for (const meal of meals) {
     const w = getWeekStart(meal.eaten_at);
     const d = getDayKey(meal.eaten_at);
     if (!map[w]) map[w] = {};
-    if (!map[w][d]) map[w][d] = [];
-    map[w][d].push(meal);
+    if (!map[w][d]) map[w][d] = {};
+    if (!map[w][d][meal.meal_type]) map[w][d][meal.meal_type] = [];
+    map[w][d][meal.meal_type].push(meal);
   }
 
   return Object.entries(map)
-    .sort(([a], [b]) => b.localeCompare(a)) // newest week first
+    .sort(([a], [b]) => b.localeCompare(a))
     .map(([weekStart, daysMap]) => {
-      const days = Object.entries(daysMap)
-        .sort(([a], [b]) => b.localeCompare(a)) // newest day first
-        .map(([dayKey, meals]) => ({ dayKey, meals }));
-      return { weekStart, days, totalMeals: days.reduce((n, d) => n + d.meals.length, 0) };
+      const days: DayGroup[] = Object.entries(daysMap)
+        .sort(([a], [b]) => b.localeCompare(a))
+        .map(([dayKey, typeMap]) => {
+          const typeGroups: TypeGroup[] = Object.entries(typeMap)
+            .sort(([a], [b]) => sortByType(a, b))
+            .map(([mealType, meals]) => ({
+              mealType,
+              meals: [...meals].sort(
+                (x, y) => new Date(x.eaten_at).getTime() - new Date(y.eaten_at).getTime()
+              ),
+            }));
+          return { dayKey, typeGroups };
+        });
+
+      const totalMeals = days.reduce(
+        (n, d) => n + d.typeGroups.reduce((m, g) => m + g.meals.length, 0), 0
+      );
+      return { weekStart, days, totalMeals };
     });
 }
 
@@ -94,7 +144,7 @@ interface Props {
 
 export default function MealsSection({ meals, token }: Props) {
   const currentWeekStart = useMemo(() => getWeekStart(new Date().toISOString()), []);
-  const grouped = useMemo(() => groupByWeekAndDay(meals), [meals]);
+  const grouped = useMemo(() => groupMeals(meals), [meals]);
 
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([currentWeekStart]));
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -160,110 +210,124 @@ export default function MealsSection({ meals, token }: Props) {
               {/* Week body */}
               {isOpen && (
                 <div className="border-t border-gray-100 divide-y divide-gray-50">
-                  {days.map(({ dayKey, meals: dayMeals }) => (
+                  {days.map(({ dayKey, typeGroups }) => (
                     <div key={dayKey}>
                       {/* Day header */}
-                      <div className="px-5 py-2 bg-gray-50">
+                      <div className="px-5 py-2.5 bg-gray-50">
                         <p className="text-xs font-medium text-gray-500 capitalize">
                           {formatDayLabel(dayKey)}
                         </p>
                       </div>
 
-                      {/* Meals */}
-                      <div className="divide-y divide-gray-50">
-                        {dayMeals.map((meal) => {
-                          const status = STATUS_LABELS[meal.feedback_status] ?? STATUS_LABELS.pending_ai;
-                          const analysis = meal.ai_analysis;
+                      {/* Meal type sections */}
+                      {typeGroups.map(({ mealType, meals: typeMeals }) => (
+                        <div key={mealType}>
+                          {/* Meal type header */}
+                          <div className="px-5 py-2 flex items-center gap-2 bg-white border-b border-gray-50">
+                            <span className="text-sm">{MEAL_EMOJI[mealType] ?? '🍽️'}</span>
+                            <span className="text-xs font-semibold text-gray-500">
+                              {MEAL_LABELS[mealType] ?? mealType}
+                            </span>
+                            <div className="flex-1 h-px bg-gray-100" />
+                            <span className="text-xs text-gray-400">
+                              {typeMeals.length} {typeMeals.length !== 1 ? 'registos' : 'registo'}
+                            </span>
+                          </div>
 
-                          return (
-                            <div key={meal.id}>
-                              <div className="flex gap-4 p-4">
-                                {/* Thumbnail — click to open lightbox */}
-                                <button
-                                  onClick={() => setLightbox(meal.photo_url)}
-                                  className="group relative w-24 h-24 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                  aria-label="Ver imagem ampliada"
-                                >
-                                  <Image src={meal.photo_url} alt="Refeição" fill className="object-cover" />
-                                  <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/35 transition-colors">
-                                    <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
-                                  </span>
-                                </button>
+                          {/* Meals */}
+                          <div className="divide-y divide-gray-50">
+                            {typeMeals.map((meal) => {
+                              const status = STATUS_LABELS[meal.feedback_status] ?? STATUS_LABELS.pending_ai;
+                              const analysis = meal.ai_analysis;
 
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1.5">
-                                    <span className="font-medium text-sm text-gray-900">
-                                      {MEAL_LABELS[meal.meal_type] ?? meal.meal_type}
-                                    </span>
-                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.color}`}>
-                                      {status.label}
-                                    </span>
+                              return (
+                                <div key={meal.id}>
+                                  <div className="flex gap-4 p-4">
+                                    {/* Thumbnail */}
+                                    <button
+                                      onClick={() => setLightbox(meal.photo_url)}
+                                      className="group relative w-24 h-24 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                      aria-label="Ver imagem ampliada"
+                                    >
+                                      <Image src={meal.photo_url} alt="Refeição" fill className="object-cover" />
+                                      <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/35 transition-colors">
+                                        <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                                      </span>
+                                    </button>
+
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-1.5">
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.color}`}>
+                                          {status.label}
+                                        </span>
+                                      </div>
+
+                                      <p className="text-xs text-gray-400 mb-3">
+                                        {new Date(meal.eaten_at).toLocaleString('pt-PT', {
+                                          hour: '2-digit', minute: '2-digit',
+                                        })}
+                                      </p>
+
+                                      {meal.client_notes && (
+                                        <p className="text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5 mb-3 leading-relaxed">
+                                          <span className="font-medium text-blue-600">Notas: </span>
+                                          {meal.client_notes}
+                                        </p>
+                                      )}
+
+                                      {analysis && (
+                                        <div className="flex flex-wrap gap-2 text-xs">
+                                          {[
+                                            { label: 'kcal',  value: analysis.macros.calories },
+                                            { label: 'prot',  value: `${analysis.macros.protein_g}g` },
+                                            { label: 'hidr',  value: `${analysis.macros.carbs_g}g` },
+                                            { label: 'gord',  value: `${analysis.macros.fat_g}g` },
+                                            { label: 'score', value: `${analysis.score}/10` },
+                                          ].map((m) => (
+                                            <div key={m.label} className="bg-gray-50 rounded px-2 py-1 text-center">
+                                              <p className="font-semibold text-gray-700">{m.value}</p>
+                                              <p className="text-gray-400">{m.label}</p>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
 
-                                  <p className="text-xs text-gray-400 mb-3">
-                                    {new Date(meal.eaten_at).toLocaleString('pt-PT', {
-                                      hour: '2-digit', minute: '2-digit',
-                                    })}
-                                  </p>
-
-                                  {meal.client_notes && (
-                                    <p className="text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5 mb-3 leading-relaxed">
-                                      <span className="font-medium text-blue-600">Notas: </span>
-                                      {meal.client_notes}
-                                    </p>
-                                  )}
-
-                                  {analysis && (
-                                    <div className="flex flex-wrap gap-2 text-xs">
-                                      {[
-                                        { label: 'kcal', value: analysis.macros.calories },
-                                        { label: 'prot', value: `${analysis.macros.protein_g}g` },
-                                        { label: 'hidr', value: `${analysis.macros.carbs_g}g` },
-                                        { label: 'gord', value: `${analysis.macros.fat_g}g` },
-                                        { label: 'score', value: `${analysis.score}/10` },
-                                      ].map((m) => (
-                                        <div key={m.label} className="bg-gray-50 rounded px-2 py-1 text-center">
-                                          <p className="font-semibold text-gray-700">{m.value}</p>
-                                          <p className="text-gray-400">{m.label}</p>
-                                        </div>
-                                      ))}
+                                  {analysis?.summary && (
+                                    <div className="px-4 pb-2">
+                                      <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                                        <span className="font-medium text-gray-600">IA: </span>
+                                        {analysis.summary}
+                                      </p>
                                     </div>
                                   )}
-                                </div>
-                              </div>
 
-                              {analysis?.summary && (
-                                <div className="px-4 pb-2">
-                                  <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-                                    <span className="font-medium text-gray-600">IA: </span>
-                                    {analysis.summary}
-                                  </p>
-                                </div>
-                              )}
+                                  {analysis?.foods?.length > 0 && (
+                                    <div className="px-4 pb-2">
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {analysis.foods.map((food: any, i: number) => (
+                                          <span key={i} className="text-xs bg-brand-50 text-brand-700 rounded-full px-2 py-0.5">
+                                            {food.name} ({food.portion_g}g)
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
 
-                              {analysis?.foods?.length > 0 && (
-                                <div className="px-4 pb-2">
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {analysis.foods.map((food: any, i: number) => (
-                                      <span key={i} className="text-xs bg-brand-50 text-brand-700 rounded-full px-2 py-0.5">
-                                        {food.name} ({food.portion_g}g)
-                                      </span>
-                                    ))}
-                                  </div>
+                                  <FeedbackEditor
+                                    mealId={meal.id}
+                                    aiDraft={meal.ai_feedback_draft}
+                                    currentFeedback={meal.nutritionist_feedback}
+                                    status={meal.feedback_status}
+                                    token={token}
+                                  />
                                 </div>
-                              )}
-
-                              <FeedbackEditor
-                                mealId={meal.id}
-                                aiDraft={meal.ai_feedback_draft}
-                                currentFeedback={meal.nutritionist_feedback}
-                                status={meal.feedback_status}
-                                token={token}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>

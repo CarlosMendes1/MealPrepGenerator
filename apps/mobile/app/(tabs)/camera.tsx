@@ -1,25 +1,37 @@
 import { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, Image, ScrollView, Alert, ActivityIndicator, TextInput,
+  View, Text, TouchableOpacity, Image, ScrollView, Alert,
+  ActivityIndicator, TextInput, Modal, FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera as CameraIcon, Image as ImageIcon, Check, X } from 'lucide-react-native';
+import { Camera as CameraIcon, Image as ImageIcon, Check, X, ChevronDown } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { supabase } from '@/services/supabase';
 
-type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+type MealType =
+  | 'breakfast'
+  | 'morning_snack'
+  | 'lunch'
+  | 'afternoon_snack'
+  | 'dinner'
+  | 'supper'
+  | 'snack';
 
 const MEAL_TYPES: { key: MealType; label: string; emoji: string }[] = [
-  { key: 'breakfast', label: 'Pequeno-almoço', emoji: '🌅' },
-  { key: 'lunch', label: 'Almoço', emoji: '☀️' },
-  { key: 'dinner', label: 'Jantar', emoji: '🌙' },
-  { key: 'snack', label: 'Snack', emoji: '🍎' },
+  { key: 'breakfast',       label: 'Pequeno-almoço',   emoji: '🌅' },
+  { key: 'morning_snack',   label: 'Lanche da manhã',  emoji: '🍌' },
+  { key: 'lunch',           label: 'Almoço',            emoji: '☀️' },
+  { key: 'afternoon_snack', label: 'Lanche da tarde',  emoji: '🍎' },
+  { key: 'dinner',          label: 'Jantar',            emoji: '🌙' },
+  { key: 'supper',          label: 'Ceia',              emoji: '🌛' },
+  { key: 'snack',           label: 'Snack',             emoji: '🥜' },
 ];
 
 export default function CameraScreen() {
-  const [photo, setPhoto] = useState<{ uri: string; base64?: string } | null>(null);
-  const [mealType, setMealType] = useState<MealType>('lunch');
+  const [photo, setPhoto] = useState<{ uri: string } | null>(null);
+  const [mealType, setMealType] = useState<MealType | null>(null);
+  const [pickerVisible, setPickerVisible] = useState(false);
   const [notes, setNotes] = useState('');
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
@@ -57,6 +69,10 @@ export default function CameraScreen() {
 
   async function uploadMeal() {
     if (!photo) return;
+    if (!mealType) {
+      Alert.alert('Tipo de refeição', 'Por favor seleciona o tipo de refeição antes de enviar.');
+      return;
+    }
     setUploading(true);
 
     try {
@@ -65,7 +81,6 @@ export default function CameraScreen() {
 
       const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
 
-      // Build FormData
       const formData = new FormData();
       const ext = photo.uri.split('.').pop() ?? 'jpg';
       formData.append('photo', {
@@ -87,6 +102,8 @@ export default function CameraScreen() {
       setDone(true);
       setTimeout(() => {
         setPhoto(null);
+        setMealType(null);
+        setNotes('');
         setDone(false);
         router.push('/(tabs)/');
       }, 1500);
@@ -96,6 +113,9 @@ export default function CameraScreen() {
       setUploading(false);
     }
   }
+
+  const selectedType = MEAL_TYPES.find((t) => t.key === mealType);
+  const canSubmit = !!photo && !!mealType && !uploading && !done;
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -138,26 +158,25 @@ export default function CameraScreen() {
             </View>
           )}
 
-          {/* Meal type */}
-          <Text className="font-semibold text-gray-900 text-sm mb-3">Tipo de refeição</Text>
-          <View className="flex-row flex-wrap gap-2 mb-6">
-            {MEAL_TYPES.map((t) => (
-              <TouchableOpacity
-                key={t.key}
-                onPress={() => setMealType(t.key)}
-                className={`flex-row items-center gap-2 px-4 py-2.5 rounded-xl border ${
-                  mealType === t.key
-                    ? 'bg-brand-600 border-brand-600'
-                    : 'bg-white border-gray-200'
-                }`}
-              >
-                <Text>{t.emoji}</Text>
-                <Text className={`text-sm font-medium ${mealType === t.key ? 'text-white' : 'text-gray-700'}`}>
-                  {t.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {/* Meal type dropdown */}
+          <Text className="font-semibold text-gray-900 text-sm mb-2">
+            Tipo de refeição <Text className="text-red-400">*</Text>
+          </Text>
+          <TouchableOpacity
+            onPress={() => setPickerVisible(true)}
+            className={`flex-row items-center justify-between bg-white border rounded-xl px-4 py-3.5 mb-5 ${
+              mealType ? 'border-gray-200' : 'border-red-200'
+            }`}
+          >
+            {selectedType ? (
+              <Text className="text-sm text-gray-800 font-medium">
+                {selectedType.emoji}  {selectedType.label}
+              </Text>
+            ) : (
+              <Text className="text-sm text-gray-400">Seleciona o tipo de refeição...</Text>
+            )}
+            <ChevronDown size={18} color="#9ca3af" />
+          </TouchableOpacity>
 
           {/* Notes */}
           {photo && (
@@ -184,9 +203,9 @@ export default function CameraScreen() {
           {photo && (
             <TouchableOpacity
               onPress={uploadMeal}
-              disabled={uploading || done}
+              disabled={!canSubmit}
               className={`rounded-xl py-4 items-center flex-row justify-center gap-2 ${
-                done ? 'bg-green-500' : 'bg-brand-600'
+                done ? 'bg-green-500' : canSubmit ? 'bg-brand-600' : 'bg-gray-300'
               }`}
             >
               {uploading ? (
@@ -194,9 +213,9 @@ export default function CameraScreen() {
               ) : done ? (
                 <Check size={20} color="white" />
               ) : (
-                <CameraIcon size={20} color="white" />
+                <CameraIcon size={20} color={canSubmit ? 'white' : '#9ca3af'} />
               )}
-              <Text className="text-white font-semibold text-base">
+              <Text className={`font-semibold text-base ${done || canSubmit ? 'text-white' : 'text-gray-400'}`}>
                 {uploading ? 'A enviar...' : done ? 'Enviado!' : 'Enviar refeição'}
               </Text>
             </TouchableOpacity>
@@ -213,6 +232,50 @@ export default function CameraScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Meal type picker modal */}
+      <Modal
+        visible={pickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerVisible(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setPickerVisible(false)}
+          className="flex-1 bg-black/50 justify-end"
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <View className="bg-white rounded-t-3xl px-5 pt-4 pb-8">
+              <View className="w-10 h-1 bg-gray-200 rounded-full self-center mb-4" />
+              <Text className="font-bold text-gray-900 text-base mb-4">Tipo de refeição</Text>
+              <FlatList
+                data={MEAL_TYPES}
+                keyExtractor={(item) => item.key}
+                scrollEnabled={false}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    onPress={() => { setMealType(item.key); setPickerVisible(false); }}
+                    className={`flex-row items-center gap-3 py-3.5 px-4 rounded-xl mb-1 ${
+                      mealType === item.key ? 'bg-brand-50' : ''
+                    }`}
+                  >
+                    <Text className="text-xl">{item.emoji}</Text>
+                    <Text className={`text-sm font-medium ${
+                      mealType === item.key ? 'text-brand-700' : 'text-gray-800'
+                    }`}>
+                      {item.label}
+                    </Text>
+                    {mealType === item.key && (
+                      <Check size={16} color="#16a34a" style={{ marginLeft: 'auto' }} />
+                    )}
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }

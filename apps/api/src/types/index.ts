@@ -1,6 +1,13 @@
 export type UserRole = 'nutritionist' | 'client';
 
-export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type MealType =
+  | 'breakfast'
+  | 'morning_snack'
+  | 'lunch'
+  | 'afternoon_snack'
+  | 'dinner'
+  | 'supper'
+  | 'snack'; // kept for backward-compatibility
 
 export type FeedbackStatus = 'pending_ai' | 'draft' | 'sent';
 
