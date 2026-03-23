@@ -27,6 +27,7 @@ export interface Meal {
   photo_url: string;
   meal_type: MealType;
   eaten_at: string;
+  client_notes: string | null;
   ai_analysis: MealAnalysis | null;
   ai_feedback_draft: string | null;
   nutritionist_feedback: string | null;

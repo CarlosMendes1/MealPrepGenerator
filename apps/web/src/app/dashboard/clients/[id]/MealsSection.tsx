@@ -206,6 +206,13 @@ export default function MealsSection({ meals, token }: Props) {
                                     })}
                                   </p>
 
+                                  {meal.client_notes && (
+                                    <p className="text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5 mb-3 leading-relaxed">
+                                      <span className="font-medium text-blue-600">Notas: </span>
+                                      {meal.client_notes}
+                                    </p>
+                                  )}
+
                                   {analysis && (
                                     <div className="flex flex-wrap gap-2 text-xs">
                                       {[

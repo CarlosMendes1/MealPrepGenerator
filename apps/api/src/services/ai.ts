@@ -19,9 +19,14 @@ export async function analyzeMealPhoto(
   mimeType: string,
   clientGoal: Goal,
   clientAge?: number,
-  clientWeightKg?: number
+  clientWeightKg?: number,
+  clientNotes?: string | null
 ): Promise<{ analysis: MealAnalysis; feedbackDraft: string }> {
   const targets = DAILY_TARGETS[clientGoal];
+
+  const notesSection = clientNotes?.trim()
+    ? `\nClient notes about this meal (use this to improve accuracy — trust it over visual guesses):\n"${clientNotes.trim()}"\n`
+    : '';
 
   const prompt = `You are a professional nutritionist analyzing a meal photo.
 
@@ -30,7 +35,7 @@ Client profile:
 - Age: ${clientAge ?? 'unknown'}
 - Weight: ${clientWeightKg ? `${clientWeightKg} kg` : 'unknown'}
 - Daily targets: ${targets.calories} kcal, ${targets.protein_g}g protein, ${targets.carbs_g}g carbs, ${targets.fat_g}g fat
-
+${notesSection}
 Analyze this meal photo and respond in valid JSON only (no markdown, no extra text) with this exact structure:
 {
   "analysis": {
@@ -58,7 +63,7 @@ Analyze this meal photo and respond in valid JSON only (no markdown, no extra te
 }
 
 Score (1-10): how well this meal aligns with the client's goal.
-Estimate portions based on visual cues. If unsure, note it in the summary.`;
+Estimate portions based on visual cues and client notes. If the client provided ingredient details, use those as the primary source for food identification and quantities.`;
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',

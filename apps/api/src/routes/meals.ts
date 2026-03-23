@@ -55,7 +55,7 @@ const paginationSchema = z.object({
 });
 
 // ── Columns to expose ─────────────────────────────────────────────────────
-const MEAL_COLUMNS = 'id, client_id, photo_url, meal_type, eaten_at, feedback_status, ai_analysis, ai_feedback_draft, nutritionist_feedback, created_at';
+const MEAL_COLUMNS = 'id, client_id, photo_url, meal_type, eaten_at, client_notes, feedback_status, ai_analysis, ai_feedback_draft, nutritionist_feedback, created_at';
 
 // ── POST /meals — client uploads a meal photo ─────────────────────────────
 router.post(
@@ -74,6 +74,10 @@ router.post(
       res.status(400).json({ error: 'meal_type must be one of: breakfast, lunch, dinner, snack' });
       return;
     }
+
+    const clientNotes = typeof req.body.client_notes === 'string'
+      ? req.body.client_notes.trim().slice(0, 500) || null
+      : null;
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -105,6 +109,7 @@ router.post(
         photo_url: publicUrl,
         meal_type: mealType.data,
         eaten_at: new Date().toISOString(),
+        client_notes: clientNotes,
         feedback_status: 'pending_ai',
       })
       .select(MEAL_COLUMNS)
@@ -122,7 +127,8 @@ router.post(
         req.file.mimetype,
         (profile?.goal as Goal) ?? 'maintain',
         profile?.age,
-        profile?.weight_kg
+        profile?.weight_kg,
+        clientNotes
       );
 
       await supabase

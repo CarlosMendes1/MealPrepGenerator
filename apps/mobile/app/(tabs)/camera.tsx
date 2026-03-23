@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, Image, ScrollView, Alert, ActivityIndicator,
+  View, Text, TouchableOpacity, Image, ScrollView, Alert, ActivityIndicator, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -20,6 +20,7 @@ const MEAL_TYPES: { key: MealType; label: string; emoji: string }[] = [
 export default function CameraScreen() {
   const [photo, setPhoto] = useState<{ uri: string; base64?: string } | null>(null);
   const [mealType, setMealType] = useState<MealType>('lunch');
+  const [notes, setNotes] = useState('');
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -73,6 +74,7 @@ export default function CameraScreen() {
         name: `meal.${ext}`,
       } as any);
       formData.append('meal_type', mealType);
+      if (notes.trim()) formData.append('client_notes', notes.trim());
 
       const res = await fetch(`${API_URL}/api/meals`, {
         method: 'POST',
@@ -156,6 +158,27 @@ export default function CameraScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* Notes */}
+          {photo && (
+            <View className="mb-5">
+              <Text className="font-semibold text-gray-900 text-sm mb-2">
+                Ingredientes / notas <Text className="text-gray-400 font-normal">(opcional)</Text>
+              </Text>
+              <TextInput
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Ex: arroz integral, frango grelhado 150g, azeite 1 colher..."
+                placeholderTextColor="#9ca3af"
+                multiline
+                numberOfLines={3}
+                maxLength={500}
+                className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 min-h-[72px]"
+                style={{ textAlignVertical: 'top' }}
+              />
+              <Text className="text-xs text-gray-400 mt-1 text-right">{notes.length}/500</Text>
+            </View>
+          )}
 
           {/* Submit */}
           {photo && (
