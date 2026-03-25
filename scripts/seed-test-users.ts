@@ -4,7 +4,9 @@
  * Requer: apps/api/.env com SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY
  */
 
-import 'dotenv/config';
+import { config } from 'dotenv';
+import { resolve } from 'path';
+config({ path: resolve(__dirname, '../apps/api/.env') });
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
