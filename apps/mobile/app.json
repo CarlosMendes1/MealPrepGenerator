@@ -45,6 +45,10 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "supabaseUrl": "https://xxxx.supabase.co",
+      "supabaseAnonKey": "eyJ..."
     }
   }
 }
