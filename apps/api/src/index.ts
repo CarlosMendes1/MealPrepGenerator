@@ -24,6 +24,7 @@ import clientsRouter from './routes/clients.js';
 import mealsRouter from './routes/meals.js';
 import dashboardRouter from './routes/dashboard.js';
 import organizationsRouter from './routes/organizations.js';
+import consultationsRouter from './routes/consultations.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -97,6 +98,7 @@ app.use('/api/clients', clientsRouter);
 app.use('/api/meals', aiLimiter, mealsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/organizations', organizationsRouter);
+app.use('/api/consultations', consultationsRouter);
 
 // ── Global error handler — never leak stack traces to clients ─────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

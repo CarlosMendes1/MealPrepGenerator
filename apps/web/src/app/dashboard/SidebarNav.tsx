@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Users, Settings, Users2, BarChart3, ChevronRight,
+  LayoutDashboard, Users, Settings, Users2, BarChart3, ChevronRight, CalendarDays,
 } from 'lucide-react';
 
 interface OrgContext {
@@ -17,9 +17,10 @@ interface Props {
 }
 
 const MAIN_LINKS = [
-  { href: '/dashboard',          icon: LayoutDashboard, label: 'Dashboard', exact: true },
-  { href: '/dashboard/clients',  icon: Users,            label: 'Clientes' },
-  { href: '/dashboard/settings', icon: Settings,         label: 'Definições' },
+  { href: '/dashboard',               icon: LayoutDashboard, label: 'Dashboard',  exact: true },
+  { href: '/dashboard/clients',       icon: Users,            label: 'Clientes' },
+  { href: '/dashboard/consultations', icon: CalendarDays,     label: 'Consultas' },
+  { href: '/dashboard/settings',      icon: Settings,         label: 'Definições' },
 ];
 
 const TEAM_LINKS = [
