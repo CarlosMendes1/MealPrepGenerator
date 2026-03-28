@@ -6,6 +6,8 @@ import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import { timeAgo } from '@/utils/time';
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 interface Meal {
   id: string;
   photo_url: string;
@@ -21,15 +23,10 @@ interface Meal {
   } | null;
 }
 
-// Canonical order and labels for every meal type
+// ── Constants ─────────────────────────────────────────────────────────────────
+
 const MEAL_TYPE_ORDER: string[] = [
-  'breakfast',
-  'morning_snack',
-  'lunch',
-  'afternoon_snack',
-  'dinner',
-  'supper',
-  'snack',
+  'breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'supper', 'snack',
 ];
 
 const MEAL_LABELS: Record<string, string> = {
@@ -43,13 +40,8 @@ const MEAL_LABELS: Record<string, string> = {
 };
 
 const MEAL_EMOJI: Record<string, string> = {
-  breakfast:       '🌅',
-  morning_snack:   '🍌',
-  lunch:           '☀️',
-  afternoon_snack: '🍎',
-  dinner:          '🌙',
-  supper:          '🌛',
-  snack:           '🥜',
+  breakfast: '🌅', morning_snack: '🍌', lunch: '☀️',
+  afternoon_snack: '🍎', dinner: '🌙', supper: '🌛', snack: '🥜',
 };
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
@@ -58,7 +50,107 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }>
   sent:       { label: 'Feedback recebido', bg: 'bg-brand-100', text: 'text-brand-700' },
 };
 
-// Group meals: date → meal_type → Meal[]
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function MacroBadge({ label, value }: { label: string; value: string | number }) {
+  return (
+    <View className="bg-gray-50 rounded-lg px-2 py-1 items-center">
+      <Text className="text-xs font-bold text-gray-700">{value}</Text>
+      <Text className="text-xs text-gray-400">{label}</Text>
+    </View>
+  );
+}
+
+function MealCard({ meal }: { meal: Meal }) {
+  const status = STATUS_CONFIG[meal.feedback_status] ?? STATUS_CONFIG.pending_ai;
+
+  return (
+    <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+      {/* Photo + macros row */}
+      <View className="flex-row gap-3 p-4">
+        <Image source={{ uri: meal.photo_url }} className="w-28 h-28 rounded-xl" resizeMode="cover" />
+
+        <View className="flex-1">
+          {/* Time + status */}
+          <View className="flex-row items-center justify-between mb-2">
+            <View className="flex-row items-center gap-1">
+              <Clock size={11} color="#9ca3af" />
+              <Text className="text-xs text-gray-400">{timeAgo(meal.eaten_at)}</Text>
+            </View>
+            <View className={`px-2 py-0.5 rounded-full ${status.bg}`}>
+              <Text className={`text-xs font-medium ${status.text}`}>{status.label}</Text>
+            </View>
+          </View>
+
+          {/* Macros */}
+          {meal.ai_analysis && (
+            <View className="flex-row gap-2 mt-1">
+              <MacroBadge label="kcal"  value={meal.ai_analysis.macros.calories} />
+              <MacroBadge label="prot"  value={`${meal.ai_analysis.macros.protein_g}g`} />
+              <MacroBadge label="score" value={`${meal.ai_analysis.score}/10`} />
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Food tags */}
+      {meal.ai_analysis?.foods && meal.ai_analysis.foods.length > 0 && (
+        <View className="flex-row flex-wrap gap-1.5 px-4 pb-3">
+          {meal.ai_analysis.foods.slice(0, 4).map((food, i) => (
+            <View key={i} className="bg-brand-50 px-2 py-0.5 rounded-full">
+              <Text className="text-xs text-brand-700">{food.name}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Nutritionist feedback */}
+      {meal.feedback_status === 'sent' && meal.nutritionist_feedback && (
+        <View className="mx-4 mb-4 bg-brand-50 rounded-xl p-3">
+          <View className="flex-row items-center gap-1.5 mb-1">
+            <MessageSquare size={12} color="#16a34a" />
+            <Text className="text-xs font-semibold text-brand-700">Feedback</Text>
+          </View>
+          <Text className="text-sm text-gray-700">{meal.nutritionist_feedback}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function MealTypeSection({ mealType, meals }: { mealType: string; meals: Meal[] }) {
+  return (
+    <View className="mb-4">
+      <View className="flex-row items-center gap-2 mb-2 px-1">
+        <Text className="text-base">{MEAL_EMOJI[mealType] ?? '🍽️'}</Text>
+        <Text className="text-xs font-semibold text-gray-600">{MEAL_LABELS[mealType] ?? mealType}</Text>
+        <View className="flex-1 h-px bg-gray-200 ml-1" />
+      </View>
+      <View className="space-y-2">
+        {meals.map((meal) => <MealCard key={meal.id} meal={meal} />)}
+      </View>
+    </View>
+  );
+}
+
+function DaySection({ dateLabel, typeGroups }: {
+  dateLabel: string;
+  typeGroups: Array<{ mealType: string; meals: Meal[] }>;
+}) {
+  return (
+    <View className="mb-6">
+      <Text className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 capitalize">
+        {dateLabel}
+      </Text>
+      {typeGroups.map(({ mealType, meals }) => (
+        <MealTypeSection key={mealType} mealType={mealType} meals={meals} />
+      ))}
+    </View>
+  );
+}
+
+// ── Grouping logic ────────────────────────────────────────────────────────────
+
 function groupMeals(meals: Meal[]): Array<{
   dateLabel: string;
   dateKey: string;
@@ -80,13 +172,12 @@ function groupMeals(meals: Meal[]): Array<{
   }
 
   return Object.entries(byDate)
-    .sort(([a], [b]) => b.localeCompare(a)) // newest day first
+    .sort(([a], [b]) => b.localeCompare(a))
     .map(([dateKey, typeMap]) => {
       const dateLabel = new Date(dateKey + 'T12:00:00').toLocaleDateString('pt-PT', {
         weekday: 'long', day: 'numeric', month: 'long',
       });
 
-      // Sort type groups in canonical order; unknown types go last alphabetically
       const typeGroups = Object.entries(typeMap)
         .sort(([a], [b]) => {
           const ia = MEAL_TYPE_ORDER.indexOf(a);
@@ -107,6 +198,8 @@ function groupMeals(meals: Meal[]): Array<{
     });
 }
 
+// ── Screen ────────────────────────────────────────────────────────────────────
+
 export default function MealsScreen() {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,20 +218,13 @@ export default function MealsScreen() {
 
   useEffect(() => { load(); }, []);
 
-  // Realtime: patch meal in state when nutritionist sends feedback
   useEffect(() => {
     const channel = supabase
       .channel('history-meals-feedback')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'meals' },
-        (payload) => {
-          const updated = payload.new as Meal;
-          setMeals((prev) =>
-            prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
-          );
-        }
-      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'meals' }, (payload) => {
+        const updated = payload.new as Meal;
+        setMeals((prev) => prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)));
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -152,6 +238,15 @@ export default function MealsScreen() {
 
   const grouped = groupMeals(meals);
 
+  if (loading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
+        <ActivityIndicator size="large" color="#16a34a" />
+        <Text className="text-gray-400 text-sm mt-3">A carregar refeições...</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <ScrollView
@@ -161,113 +256,14 @@ export default function MealsScreen() {
         <View className="px-5 pt-6 pb-8">
           <Text className="text-2xl font-bold text-gray-900 mb-6">Histórico de refeições</Text>
 
-          {loading ? (
-            <View className="items-center py-16">
-              <ActivityIndicator size="large" color="#16a34a" />
-              <Text className="text-gray-400 text-sm mt-3">A carregar refeições...</Text>
-            </View>
-          ) : grouped.length === 0 ? (
+          {grouped.length === 0 ? (
             <View className="bg-white rounded-2xl border border-gray-100 py-12 items-center">
               <Text className="text-4xl mb-3">📋</Text>
               <Text className="text-gray-500 text-sm">Ainda sem refeições registadas.</Text>
             </View>
           ) : (
             grouped.map(({ dateKey, dateLabel, typeGroups }) => (
-              <View key={dateKey} className="mb-6">
-                {/* Day header */}
-                <Text className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 capitalize">
-                  {dateLabel}
-                </Text>
-
-                {/* Meal type sections */}
-                {typeGroups.map(({ mealType, meals: typeMeals }) => (
-                  <View key={mealType} className="mb-4">
-                    {/* Meal type label */}
-                    <View className="flex-row items-center gap-2 mb-2 px-1">
-                      <Text className="text-base">{MEAL_EMOJI[mealType] ?? '🍽️'}</Text>
-                      <Text className="text-xs font-semibold text-gray-600">
-                        {MEAL_LABELS[mealType] ?? mealType}
-                      </Text>
-                      <View className="flex-1 h-px bg-gray-200 ml-1" />
-                    </View>
-
-                    <View className="space-y-2">
-                      {typeMeals.map((meal) => {
-                        const status = STATUS_CONFIG[meal.feedback_status] ?? STATUS_CONFIG.pending_ai;
-
-                        return (
-                          <View key={meal.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                            <View className="flex-row gap-3 p-4">
-                              {/* Thumbnail */}
-                              <Image
-                                source={{ uri: meal.photo_url }}
-                                className="w-28 h-28 rounded-xl"
-                                resizeMode="cover"
-                              />
-
-                              {/* Content */}
-                              <View className="flex-1">
-                                <View className="flex-row items-center justify-between mb-1">
-                                  <View className="flex-row items-center gap-1">
-                                    <Clock size={11} color="#9ca3af" />
-                                    <Text className="text-xs text-gray-400">
-                                      {timeAgo(meal.eaten_at)}
-                                    </Text>
-                                  </View>
-                                  <View className={`px-2 py-0.5 rounded-full ${status.bg}`}>
-                                    <Text className={`text-xs font-medium ${status.text}`}>
-                                      {status.label}
-                                    </Text>
-                                  </View>
-                                </View>
-
-                                {meal.ai_analysis && (
-                                  <View className="flex-row gap-2 mt-1">
-                                    {[
-                                      { label: 'kcal', v: meal.ai_analysis.macros.calories },
-                                      { label: 'prot', v: `${meal.ai_analysis.macros.protein_g}g` },
-                                      { label: 'score', v: `${meal.ai_analysis.score}/10` },
-                                    ].map((m) => (
-                                      <View key={m.label} className="bg-gray-50 rounded-lg px-2 py-1 items-center">
-                                        <Text className="text-xs font-bold text-gray-700">{m.v}</Text>
-                                        <Text className="text-xs text-gray-400">{m.label}</Text>
-                                      </View>
-                                    ))}
-                                  </View>
-                                )}
-                              </View>
-                            </View>
-
-                            {/* Foods */}
-                            {meal.ai_analysis?.foods && meal.ai_analysis.foods.length > 0 && (
-                              <View className="px-4 pb-3">
-                                <View className="flex-row flex-wrap gap-1.5">
-                                  {meal.ai_analysis.foods.slice(0, 4).map((food, i) => (
-                                    <View key={i} className="bg-brand-50 px-2 py-0.5 rounded-full">
-                                      <Text className="text-xs text-brand-700">{food.name}</Text>
-                                    </View>
-                                  ))}
-                                </View>
-                              </View>
-                            )}
-
-                            {/* Feedback */}
-                            {meal.feedback_status === 'sent' && meal.nutritionist_feedback && (
-                              <View className="mx-4 mb-4 bg-brand-50 rounded-xl p-3">
-                                <View className="flex-row items-center gap-1.5 mb-1">
-                                  <MessageSquare size={12} color="#16a34a" />
-                                  <Text className="text-xs font-semibold text-brand-700">Feedback</Text>
-                                </View>
-                                <Text className="text-sm text-gray-700">{meal.nutritionist_feedback}</Text>
-                              </View>
-                            )}
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </View>
-                ))}
-              </View>
+              <DaySection key={dateKey} dateLabel={dateLabel} typeGroups={typeGroups} />
             ))
           )}
         </View>

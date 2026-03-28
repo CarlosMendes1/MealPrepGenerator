@@ -2,10 +2,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { MessageSquare, Camera, TrendingUp } from 'lucide-react-native';
+import { MessageSquare, Camera } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import { timeAgo } from '@/utils/time';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Meal {
   id: string;
@@ -25,6 +27,8 @@ interface Profile {
   goal: string;
 }
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
 const MEAL_LABELS: Record<string, string> = {
   breakfast:       'Pequeno-almoço',
   morning_snack:   'Lanche da manhã',
@@ -34,6 +38,74 @@ const MEAL_LABELS: Record<string, string> = {
   supper:          'Ceia',
   snack:           'Snack',
 };
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function StatCard({ label, value, colorClass, borderClass }: {
+  label: string;
+  value: string | number;
+  colorClass: string;
+  borderClass: string;
+}) {
+  return (
+    <View className={`flex-1 border rounded-xl p-3 ${borderClass}`}>
+      <Text className={`text-xl font-bold ${colorClass}`}>{value}</Text>
+      <Text className="text-xs text-gray-400 mt-0.5">{label}</Text>
+    </View>
+  );
+}
+
+function TodayMealCard({ meal }: { meal: Meal }) {
+  return (
+    <View className="bg-white rounded-2xl border border-gray-100 p-4">
+      <View className="flex-row items-center justify-between mb-2">
+        <Text className="font-semibold text-gray-900 text-sm">
+          {MEAL_LABELS[meal.meal_type] ?? meal.meal_type}
+        </Text>
+        <Text className="text-xs text-gray-400">{timeAgo(meal.eaten_at)}</Text>
+      </View>
+
+      {meal.ai_analysis && (
+        <View className="flex-row gap-2 mb-2">
+          {[
+            { label: 'kcal',  value: meal.ai_analysis.macros.calories },
+            { label: 'prot',  value: `${meal.ai_analysis.macros.protein_g}g` },
+            { label: 'score', value: `${meal.ai_analysis.score}/10` },
+          ].map((s) => (
+            <View key={s.label} className="bg-gray-50 rounded-lg px-2 py-1 items-center">
+              <Text className="text-xs font-bold text-gray-700">{s.value}</Text>
+              <Text className="text-xs text-gray-400">{s.label}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {meal.feedback_status === 'sent' && meal.nutritionist_feedback && (
+        <View className="bg-brand-50 rounded-xl px-3 py-2.5 mt-1">
+          <View className="flex-row items-center gap-1.5 mb-1">
+            <MessageSquare size={12} color="#16a34a" />
+            <Text className="text-xs font-semibold text-brand-700">Feedback do nutricionista</Text>
+          </View>
+          <Text className="text-sm text-gray-700">{meal.nutritionist_feedback}</Text>
+        </View>
+      )}
+
+      {meal.feedback_status === 'draft' && (
+        <View className="bg-amber-50 rounded-xl px-3 py-2 mt-1">
+          <Text className="text-xs text-amber-600">A aguardar revisão do nutricionista...</Text>
+        </View>
+      )}
+
+      {meal.feedback_status === 'pending_ai' && (
+        <View className="bg-gray-50 rounded-xl px-3 py-2 mt-1">
+          <Text className="text-xs text-gray-400">A analisar com IA...</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -50,10 +122,9 @@ export default function HomeScreen() {
       setProfile(profileData);
 
       const today = new Date().toDateString();
-      const todayFiltered = (mealsData as Meal[]).filter(
-        (m) => new Date(m.eaten_at).toDateString() === today
+      setTodayMeals(
+        (mealsData as Meal[]).filter((m) => new Date(m.eaten_at).toDateString() === today)
       );
-      setTodayMeals(todayFiltered);
     } catch (err) {
       console.error('Failed to load home data:', err);
     } finally {
@@ -63,20 +134,13 @@ export default function HomeScreen() {
 
   useEffect(() => { load(); }, []);
 
-  // Realtime: patch meal in state when nutritionist sends feedback
   useEffect(() => {
     const channel = supabase
       .channel('home-meals-feedback')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'meals' },
-        (payload) => {
-          const updated = payload.new as Meal;
-          setTodayMeals((prev) =>
-            prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
-          );
-        }
-      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'meals' }, (payload) => {
+        const updated = payload.new as Meal;
+        setTodayMeals((prev) => prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)));
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -89,8 +153,7 @@ export default function HomeScreen() {
   }, []);
 
   const totalCalories = todayMeals.reduce((acc, m) => acc + (m.ai_analysis?.macros.calories ?? 0), 0);
-  const totalProtein = todayMeals.reduce((acc, m) => acc + (m.ai_analysis?.macros.protein_g ?? 0), 0);
-  const pendingFeedback = todayMeals.filter((m) => m.feedback_status === 'sent').length;
+  const totalProtein  = todayMeals.reduce((acc, m) => acc + (m.ai_analysis?.macros.protein_g ?? 0), 0);
   const firstName = profile?.full_name?.split(' ')[0] ?? 'Olá';
 
   if (loading) {
@@ -110,27 +173,18 @@ export default function HomeScreen() {
       >
         <View className="px-5 pt-6 pb-8">
           {/* Header */}
-          <View className="flex-row items-center justify-between mb-8">
-            <View>
-              <Text className="text-2xl font-bold text-gray-900">Olá, {firstName}</Text>
-              <Text className="text-gray-400 text-sm mt-0.5">
-                {new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </Text>
-            </View>
+          <View className="mb-8">
+            <Text className="text-2xl font-bold text-gray-900">Olá, {firstName}</Text>
+            <Text className="text-gray-400 text-sm mt-0.5">
+              {new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </Text>
           </View>
 
           {/* Daily stats */}
           <View className="flex-row gap-3 mb-6">
-            {[
-              { label: 'kcal hoje', value: totalCalories, color: 'bg-orange-50 text-orange-600', border: 'border-orange-100' },
-              { label: 'proteína', value: `${Math.round(totalProtein)}g`, color: 'bg-blue-50 text-blue-600', border: 'border-blue-100' },
-              { label: 'refeições', value: todayMeals.length, color: 'bg-brand-50 text-brand-600', border: 'border-brand-100' },
-            ].map((stat) => (
-              <View key={stat.label} className={`flex-1 border rounded-xl p-3 ${stat.border}`}>
-                <Text className={`text-xl font-bold ${stat.color.split(' ')[1]}`}>{stat.value}</Text>
-                <Text className="text-xs text-gray-400 mt-0.5">{stat.label}</Text>
-              </View>
-            ))}
+            <StatCard label="kcal hoje"  value={totalCalories}             colorClass="text-orange-600" borderClass="border-orange-100" />
+            <StatCard label="proteína"   value={`${Math.round(totalProtein)}g`} colorClass="text-blue-600"   borderClass="border-blue-100" />
+            <StatCard label="refeições"  value={todayMeals.length}         colorClass="text-brand-600" borderClass="border-brand-100" />
           </View>
 
           {/* Quick action */}
@@ -163,52 +217,7 @@ export default function HomeScreen() {
             </View>
           ) : (
             <View className="space-y-3">
-              {todayMeals.map((meal) => (
-                <View key={meal.id} className="bg-white rounded-2xl border border-gray-100 p-4">
-                  <View className="flex-row items-center justify-between mb-2">
-                    <Text className="font-semibold text-gray-900 text-sm">
-                      {MEAL_LABELS[meal.meal_type] ?? meal.meal_type}
-                    </Text>
-                    <Text className="text-xs text-gray-400">{timeAgo(meal.eaten_at)}</Text>
-                  </View>
-                  {meal.ai_analysis && (
-                    <View className="flex-row gap-2 mb-2">
-                      {[
-                        { label: 'kcal', v: meal.ai_analysis.macros.calories },
-                        { label: 'prot', v: `${meal.ai_analysis.macros.protein_g}g` },
-                        { label: 'score', v: `${meal.ai_analysis.score}/10` },
-                      ].map((s) => (
-                        <View key={s.label} className="bg-gray-50 rounded-lg px-2 py-1 items-center">
-                          <Text className="text-xs font-bold text-gray-700">{s.v}</Text>
-                          <Text className="text-xs text-gray-400">{s.label}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {meal.feedback_status === 'sent' && meal.nutritionist_feedback && (
-                    <View className="bg-brand-50 rounded-xl px-3 py-2.5 mt-1">
-                      <View className="flex-row items-center gap-1.5 mb-1">
-                        <MessageSquare size={12} color="#16a34a" />
-                        <Text className="text-xs font-semibold text-brand-700">Feedback do nutricionista</Text>
-                      </View>
-                      <Text className="text-sm text-gray-700">{meal.nutritionist_feedback}</Text>
-                    </View>
-                  )}
-
-                  {meal.feedback_status === 'draft' && (
-                    <View className="bg-amber-50 rounded-xl px-3 py-2 mt-1">
-                      <Text className="text-xs text-amber-600">A aguardar revisão do nutricionista...</Text>
-                    </View>
-                  )}
-
-                  {meal.feedback_status === 'pending_ai' && (
-                    <View className="bg-gray-50 rounded-xl px-3 py-2 mt-1">
-                      <Text className="text-xs text-gray-400">A analisar com IA...</Text>
-                    </View>
-                  )}
-                </View>
-              ))}
+              {todayMeals.map((meal) => <TodayMealCard key={meal.id} meal={meal} />)}
             </View>
           )}
         </View>
