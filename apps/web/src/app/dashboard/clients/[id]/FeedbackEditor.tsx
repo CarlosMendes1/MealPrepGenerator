@@ -1,7 +1,35 @@
 'use client';
 
 import { useState } from 'react';
-import { Wand2, Send, Check } from 'lucide-react';
+import { Wand2, Send, Check, ChevronDown } from 'lucide-react';
+
+const TRUNCATE_AT = 120;
+
+function SentFeedbackBadge({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > TRUNCATE_AT;
+  const display = isLong && !expanded ? text.slice(0, TRUNCATE_AT).trimEnd() + '…' : text;
+
+  return (
+    <div className="bg-brand-50 border border-brand-100 rounded-lg px-3 py-2.5 text-sm">
+      <div className="flex items-start gap-2">
+        <Check size={14} className="text-brand-600 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-gray-600 leading-relaxed">{display}</p>
+          {isLong && (
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-800 mt-1"
+            >
+              {expanded ? 'Ver menos' : 'Ver mais'}
+              <ChevronDown size={12} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   mealId: string;
@@ -45,10 +73,7 @@ export default function FeedbackEditor({ mealId, aiDraft, currentFeedback, statu
   if (sent) {
     return (
       <div className="px-4 pb-4">
-        <div className="flex items-center gap-2 bg-brand-50 border border-brand-100 rounded-lg px-3 py-2.5 text-sm">
-          <Check size={14} className="text-brand-600 flex-shrink-0" />
-          <p className="text-gray-600">{text}</p>
-        </div>
+        <SentFeedbackBadge text={text} />
       </div>
     );
   }

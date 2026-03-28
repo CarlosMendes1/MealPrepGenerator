@@ -6,17 +6,7 @@ import { ChevronDown, ZoomIn, X } from 'lucide-react';
 import FeedbackEditor from './FeedbackEditor';
 import { timeAgo } from '@/lib/time';
 
-// ── Meal type config ───────────────────────────────────────────────────────────
-
-const MEAL_TYPE_ORDER = [
-  'breakfast',
-  'morning_snack',
-  'lunch',
-  'afternoon_snack',
-  'dinner',
-  'supper',
-  'snack',
-];
+// ── Config ────────────────────────────────────────────────────────────────────
 
 const MEAL_LABELS: Record<string, string> = {
   breakfast:       'Pequeno-almoço',
@@ -38,17 +28,21 @@ const MEAL_EMOJI: Record<string, string> = {
   snack:           '🥜',
 };
 
+const MEAL_TYPE_ORDER = [
+  'breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'supper', 'snack',
+];
+
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending_ai: { label: 'A analisar...', color: 'bg-gray-100 text-gray-500' },
   draft:      { label: 'Rascunho pronto', color: 'bg-amber-100 text-amber-700' },
   sent:       { label: 'Feedback enviado', color: 'bg-brand-100 text-brand-700' },
 };
 
-// ── Date helpers (local-time aware) ───────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getWeekStart(dateStr: string): string {
   const d = new Date(dateStr);
-  const day = d.getDay(); // 0 = Sunday
+  const day = d.getDay();
   const monday = new Date(d);
   monday.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
   return [
@@ -72,9 +66,8 @@ function formatWeekLabel(weekStart: string, isCurrent: boolean): string {
   const d = new Date(weekStart + 'T12:00:00');
   const end = new Date(d);
   end.setDate(d.getDate() + 6);
-  const startStr = d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' });
-  const endStr = end.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' });
-  return `${startStr} – ${endStr}`;
+  const fmt = (dt: Date) => dt.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' });
+  return `${fmt(d)} – ${fmt(end)}`;
 }
 
 function formatDayLabel(dayKey: string): string {
@@ -82,15 +75,14 @@ function formatDayLabel(dayKey: string): string {
   return d.toLocaleDateString('pt-PT', { weekday: 'long', day: '2-digit', month: 'long' });
 }
 
-// ── Grouping ───────────────────────────────────────────────────────────────────
+// ── Grouping — week → day → meals (flat within day) ───────────────────────────
 
 type Meal = Record<string, any>;
 
-interface TypeGroup { mealType: string; meals: Meal[] }
-interface DayGroup  { dayKey: string; typeGroups: TypeGroup[] }
+interface DayGroup  { dayKey: string; meals: Meal[] }
 interface WeekGroup { weekStart: string; days: DayGroup[]; totalMeals: number }
 
-function sortByType(a: string, b: string): number {
+function sortMealType(a: string, b: string): number {
   const ia = MEAL_TYPE_ORDER.indexOf(a);
   const ib = MEAL_TYPE_ORDER.indexOf(b);
   if (ia === -1 && ib === -1) return a.localeCompare(b);
@@ -100,16 +92,14 @@ function sortByType(a: string, b: string): number {
 }
 
 function groupMeals(meals: Meal[]): WeekGroup[] {
-  // week → day → mealType → Meal[]
-  const map: Record<string, Record<string, Record<string, Meal[]>>> = {};
+  const map: Record<string, Record<string, Meal[]>> = {};
 
   for (const meal of meals) {
     const w = getWeekStart(meal.eaten_at);
     const d = getDayKey(meal.eaten_at);
     if (!map[w]) map[w] = {};
-    if (!map[w][d]) map[w][d] = {};
-    if (!map[w][d][meal.meal_type]) map[w][d][meal.meal_type] = [];
-    map[w][d][meal.meal_type].push(meal);
+    if (!map[w][d]) map[w][d] = [];
+    map[w][d].push(meal);
   }
 
   return Object.entries(map)
@@ -117,21 +107,16 @@ function groupMeals(meals: Meal[]): WeekGroup[] {
     .map(([weekStart, daysMap]) => {
       const days: DayGroup[] = Object.entries(daysMap)
         .sort(([a], [b]) => b.localeCompare(a))
-        .map(([dayKey, typeMap]) => {
-          const typeGroups: TypeGroup[] = Object.entries(typeMap)
-            .sort(([a], [b]) => sortByType(a, b))
-            .map(([mealType, meals]) => ({
-              mealType,
-              meals: [...meals].sort(
-                (x, y) => new Date(x.eaten_at).getTime() - new Date(y.eaten_at).getTime()
-              ),
-            }));
-          return { dayKey, typeGroups };
-        });
+        .map(([dayKey, dayMeals]) => ({
+          dayKey,
+          meals: [...dayMeals].sort((x, y) => {
+            const typeOrder = sortMealType(x.meal_type, y.meal_type);
+            if (typeOrder !== 0) return typeOrder;
+            return new Date(x.eaten_at).getTime() - new Date(y.eaten_at).getTime();
+          }),
+        }));
 
-      const totalMeals = days.reduce(
-        (n, d) => n + d.typeGroups.reduce((m, g) => m + g.meals.length, 0), 0
-      );
+      const totalMeals = days.reduce((n, d) => n + d.meals.length, 0);
       return { weekStart, days, totalMeals };
     });
 }
@@ -147,9 +132,14 @@ export default function MealsSection({ meals, token }: Props) {
   const currentWeekStart = useMemo(() => getWeekStart(new Date().toISOString()), []);
   const grouped = useMemo(() => groupMeals(meals), [meals]);
 
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([currentWeekStart]));
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  // Default: expand current week AND previous week
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const prev = new Date();
+    prev.setDate(prev.getDate() - 7);
+    return new Set([currentWeekStart, getWeekStart(prev.toISOString())]);
+  });
 
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const closeLightbox = useCallback(() => setLightbox(null), []);
 
   useEffect(() => {
@@ -184,7 +174,7 @@ export default function MealsSection({ meals, token }: Props) {
 
           return (
             <div key={weekStart} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-              {/* Week accordion header */}
+              {/* Week header */}
               <button
                 onClick={() => toggleWeek(weekStart)}
                 className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
@@ -208,11 +198,11 @@ export default function MealsSection({ meals, token }: Props) {
                 />
               </button>
 
-              {/* Week body */}
+              {/* Week body — day → meals flat */}
               {isOpen && (
-                <div className="border-t border-gray-100 divide-y divide-gray-50">
-                  {days.map(({ dayKey, typeGroups }) => (
-                    <div key={dayKey}>
+                <div className="border-t border-gray-100">
+                  {days.map(({ dayKey, meals: dayMeals }) => (
+                    <div key={dayKey} className="border-b border-gray-50 last:border-0">
                       {/* Day header */}
                       <div className="px-5 py-2.5 bg-gray-50">
                         <p className="text-xs font-medium text-gray-500 capitalize">
@@ -220,113 +210,101 @@ export default function MealsSection({ meals, token }: Props) {
                         </p>
                       </div>
 
-                      {/* Meal type sections */}
-                      {typeGroups.map(({ mealType, meals: typeMeals }) => (
-                        <div key={mealType}>
-                          {/* Meal type header */}
-                          <div className="px-5 py-2 flex items-center gap-2 bg-white border-b border-gray-50">
-                            <span className="text-sm">{MEAL_EMOJI[mealType] ?? '🍽️'}</span>
-                            <span className="text-xs font-semibold text-gray-500">
-                              {MEAL_LABELS[mealType] ?? mealType}
-                            </span>
-                            <div className="flex-1 h-px bg-gray-100" />
-                            <span className="text-xs text-gray-400">
-                              {typeMeals.length} {typeMeals.length !== 1 ? 'registos' : 'registo'}
-                            </span>
-                          </div>
+                      {/* Meals — flat list, type badge on each card */}
+                      <div className="divide-y divide-gray-50">
+                        {dayMeals.map((meal) => {
+                          const status = STATUS_LABELS[meal.feedback_status] ?? STATUS_LABELS.pending_ai;
+                          const analysis = meal.ai_analysis;
 
-                          {/* Meals */}
-                          <div className="divide-y divide-gray-50">
-                            {typeMeals.map((meal) => {
-                              const status = STATUS_LABELS[meal.feedback_status] ?? STATUS_LABELS.pending_ai;
-                              const analysis = meal.ai_analysis;
+                          return (
+                            <div key={meal.id}>
+                              <div className="flex gap-4 p-4">
+                                {/* Thumbnail */}
+                                <button
+                                  onClick={() => setLightbox(meal.photo_url)}
+                                  className="group relative w-24 h-24 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                  aria-label="Ver imagem ampliada"
+                                >
+                                  <Image src={meal.photo_url} alt="Refeição" fill className="object-cover" />
+                                  <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/35 transition-colors">
+                                    <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                                  </span>
+                                </button>
 
-                              return (
-                                <div key={meal.id}>
-                                  <div className="flex gap-4 p-4">
-                                    {/* Thumbnail */}
-                                    <button
-                                      onClick={() => setLightbox(meal.photo_url)}
-                                      className="group relative w-24 h-24 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                      aria-label="Ver imagem ampliada"
+                                <div className="flex-1 min-w-0">
+                                  {/* Type + status row */}
+                                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                    <span className="text-sm">{MEAL_EMOJI[meal.meal_type] ?? '🍽️'}</span>
+                                    <span className="text-xs font-semibold text-gray-700">
+                                      {MEAL_LABELS[meal.meal_type] ?? meal.meal_type}
+                                    </span>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.color}`}>
+                                      {status.label}
+                                    </span>
+                                    <span
+                                      className="text-xs text-gray-400 ml-auto"
+                                      title={new Date(meal.eaten_at).toLocaleString('pt-PT')}
                                     >
-                                      <Image src={meal.photo_url} alt="Refeição" fill className="object-cover" />
-                                      <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/35 transition-colors">
-                                        <ZoomIn size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
-                                      </span>
-                                    </button>
-
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 mb-1.5">
-                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.color}`}>
-                                          {status.label}
-                                        </span>
-                                      </div>
-
-                                      <p className="text-xs text-gray-400 mb-3" title={new Date(meal.eaten_at).toLocaleString('pt-PT')}>
-                                        {timeAgo(meal.eaten_at)}
-                                      </p>
-
-                                      {meal.client_notes && (
-                                        <p className="text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5 mb-3 leading-relaxed">
-                                          <span className="font-medium text-blue-600">Notas: </span>
-                                          {meal.client_notes}
-                                        </p>
-                                      )}
-
-                                      {analysis && (
-                                        <div className="flex flex-wrap gap-2 text-xs">
-                                          {[
-                                            { label: 'kcal',  value: analysis.macros.calories },
-                                            { label: 'prot',  value: `${analysis.macros.protein_g}g` },
-                                            { label: 'hidr',  value: `${analysis.macros.carbs_g}g` },
-                                            { label: 'gord',  value: `${analysis.macros.fat_g}g` },
-                                            { label: 'score', value: `${analysis.score}/10` },
-                                          ].map((m) => (
-                                            <div key={m.label} className="bg-gray-50 rounded px-2 py-1 text-center">
-                                              <p className="font-semibold text-gray-700">{m.value}</p>
-                                              <p className="text-gray-400">{m.label}</p>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
+                                      {timeAgo(meal.eaten_at)}
+                                    </span>
                                   </div>
 
-                                  {analysis?.summary && (
-                                    <div className="px-4 pb-2">
-                                      <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-                                        <span className="font-medium text-gray-600">IA: </span>
-                                        {analysis.summary}
-                                      </p>
-                                    </div>
+                                  {meal.client_notes && (
+                                    <p className="text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5 mb-2 leading-relaxed">
+                                      <span className="font-medium text-blue-600">Notas: </span>
+                                      {meal.client_notes}
+                                    </p>
                                   )}
 
-                                  {analysis?.foods?.length > 0 && (
-                                    <div className="px-4 pb-2">
-                                      <div className="flex flex-wrap gap-1.5">
-                                        {analysis.foods.map((food: any, i: number) => (
-                                          <span key={i} className="text-xs bg-brand-50 text-brand-700 rounded-full px-2 py-0.5">
-                                            {food.name} ({food.portion_g}g)
-                                          </span>
-                                        ))}
-                                      </div>
+                                  {analysis && (
+                                    <div className="flex flex-wrap gap-2 text-xs">
+                                      {[
+                                        { label: 'kcal',  value: analysis.macros.calories },
+                                        { label: 'prot',  value: `${analysis.macros.protein_g}g` },
+                                        { label: 'hidr',  value: `${analysis.macros.carbs_g}g` },
+                                        { label: 'gord',  value: `${analysis.macros.fat_g}g` },
+                                        { label: 'score', value: `${analysis.score}/10` },
+                                      ].map((m) => (
+                                        <div key={m.label} className="bg-gray-50 rounded px-2 py-1 text-center">
+                                          <p className="font-semibold text-gray-700">{m.value}</p>
+                                          <p className="text-gray-400">{m.label}</p>
+                                        </div>
+                                      ))}
                                     </div>
                                   )}
-
-                                  <FeedbackEditor
-                                    mealId={meal.id}
-                                    aiDraft={meal.ai_feedback_draft}
-                                    currentFeedback={meal.nutritionist_feedback}
-                                    status={meal.feedback_status}
-                                    token={token}
-                                  />
                                 </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
+                              </div>
+
+                              {analysis?.summary && (
+                                <div className="px-4 pb-2">
+                                  <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                                    <span className="font-medium text-gray-600">IA: </span>
+                                    {analysis.summary}
+                                  </p>
+                                </div>
+                              )}
+
+                              {analysis?.foods?.length > 0 && (
+                                <div className="px-4 pb-2 flex flex-wrap gap-1.5">
+                                  {analysis.foods.map((food: any, i: number) => (
+                                    <span key={i} className="text-xs bg-brand-50 text-brand-700 rounded-full px-2 py-0.5">
+                                      {food.name} ({food.portion_g}g)
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              <FeedbackEditor
+                                mealId={meal.id}
+                                aiDraft={meal.ai_feedback_draft}
+                                currentFeedback={meal.nutritionist_feedback}
+                                status={meal.feedback_status}
+                                token={token}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -339,7 +317,7 @@ export default function MealsSection({ meals, token }: Props) {
       {/* Lightbox */}
       {lightbox && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fadeIn"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
           onClick={closeLightbox}
         >
           <button
@@ -349,9 +327,8 @@ export default function MealsSection({ meals, token }: Props) {
           >
             <X size={20} />
           </button>
-
           <div
-            className="relative w-full max-w-3xl mx-4 rounded-xl overflow-hidden animate-scaleIn"
+            className="relative w-full max-w-3xl mx-4 rounded-xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <Image
