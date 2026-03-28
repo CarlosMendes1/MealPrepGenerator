@@ -13,6 +13,38 @@ export type FeedbackStatus = 'pending_ai' | 'draft' | 'sent';
 
 export type Goal = 'lose_weight' | 'gain_muscle' | 'maintain' | 'improve_health';
 
+export type OrgRole = 'owner' | 'admin' | 'member';
+export type IndividualPlan = 'free' | 'monthly' | 'annual';
+export type BillingInterval = 'monthly' | 'annual';
+export type SubscriptionStatus = 'trial' | 'active' | 'cancelled' | 'past_due';
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  owner_id: string;
+  plan: string;
+  billing_interval: BillingInterval;
+  subscription_status: SubscriptionStatus;
+  max_members: number;
+  trial_ends_at: string;
+  created_at: string;
+}
+
+export interface OrganizationMember {
+  id: string;
+  organization_id: string;
+  user_id: string | null;
+  role: OrgRole;
+  invited_email: string;
+  joined_at: string | null;
+  created_at: string;
+  // enriched
+  full_name?: string | null;
+  client_count?: number;
+  avg_adherence?: number | null;
+}
+
 export interface UserProfile {
   id: string;
   user_id: string;
@@ -28,6 +60,8 @@ export interface UserProfile {
   dietary_preferences?: string;
   lifestyle_notes?: string;
   nutritionist_id?: string;
+  organization_id?: string;
+  individual_plan?: IndividualPlan;
   created_at: string;
   updated_at: string;
 }

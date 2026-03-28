@@ -15,7 +15,7 @@ const paginationSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
-// ── GET /clients — list nutritionist's clients (paginated) ─────────────────
+// ── GET /clients — list clients (?context=personal|team) ──────────────────────
 router.get('/', requireAuth, requireRole('nutritionist'), async (req: AuthRequest, res) => {
   const pagination = paginationSchema.safeParse(req.query);
   if (!pagination.success) {
@@ -23,14 +23,43 @@ router.get('/', requireAuth, requireRole('nutritionist'), async (req: AuthReques
     return;
   }
   const { limit, offset } = pagination.data;
+  const context = (req.query.context as string) ?? 'personal'; // 'personal' | 'team'
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('profiles')
-    .select('user_id, full_name, age, weight_kg, goal, created_at')
-    .eq('nutritionist_id', req.userId!)
+    .select('user_id, full_name, age, weight_kg, goal, organization_id, nutritionist_id, created_at')
     .eq('role', 'client')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
+
+  if (context === 'team') {
+    // Get user's org membership
+    const { data: membership } = await supabase
+      .from('organization_members')
+      .select('organization_id, role')
+      .eq('user_id', req.userId!)
+      .not('joined_at', 'is', null)
+      .maybeSingle();
+
+    if (!membership) {
+      res.status(403).json({ error: 'Not a member of any organization.' });
+      return;
+    }
+
+    query = query.eq('organization_id', membership.organization_id);
+
+    // Members only see their own assigned clients
+    if (membership.role === 'member') {
+      query = query.eq('nutritionist_id', req.userId!);
+    }
+  } else {
+    // Personal clients: assigned to this nutritionist with no org
+    query = query
+      .eq('nutritionist_id', req.userId!)
+      .is('organization_id', null);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('[GET /clients] Supabase error:', error.message);
@@ -38,7 +67,6 @@ router.get('/', requireAuth, requireRole('nutritionist'), async (req: AuthReques
     return;
   }
 
-  // Fetch meal counts per client in parallel
   const clientsWithCounts = await Promise.all(
     (data ?? []).map(async (client) => {
       const { count } = await supabase
