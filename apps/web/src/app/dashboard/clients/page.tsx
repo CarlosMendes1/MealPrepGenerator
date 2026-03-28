@@ -14,6 +14,13 @@ async function getClients(token: string) {
   return res.json();
 }
 
+const GOAL_LABELS: Record<string, string> = {
+  lose_weight:    'Perder peso',
+  gain_muscle:    'Ganhar músculo',
+  maintain:       'Manter peso',
+  improve_health: 'Melhorar saúde',
+};
+
 export default async function ClientsPage() {
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) redirect('/login');
@@ -60,7 +67,7 @@ export default async function ClientsPage() {
                     {[
                       client.age ? `${client.age} anos` : null,
                       client.weight_kg ? `${client.weight_kg} kg` : null,
-                      client.goal?.replace(/_/g, ' ') ?? null,
+                      client.goal ? (GOAL_LABELS[client.goal] ?? client.goal.replace(/_/g, ' ')) : null,
                     ]
                       .filter(Boolean)
                       .join(' · ')}
