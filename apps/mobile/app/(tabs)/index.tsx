@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { MessageSquare, Camera, TrendingUp } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
+import { timeAgo } from '@/utils/time';
 
 interface Meal {
   id: string;
@@ -37,6 +38,7 @@ const MEAL_LABELS: Record<string, string> = {
 export default function HomeScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [todayMeals, setTodayMeals] = useState<Meal[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   async function load() {
@@ -54,6 +56,8 @@ export default function HomeScreen() {
       setTodayMeals(todayFiltered);
     } catch (err) {
       console.error('Failed to load home data:', err);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -88,6 +92,15 @@ export default function HomeScreen() {
   const totalProtein = todayMeals.reduce((acc, m) => acc + (m.ai_analysis?.macros.protein_g ?? 0), 0);
   const pendingFeedback = todayMeals.filter((m) => m.feedback_status === 'sent').length;
   const firstName = profile?.full_name?.split(' ')[0] ?? 'Olá';
+
+  if (loading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
+        <ActivityIndicator size="large" color="#16a34a" />
+        <Text className="text-gray-400 text-sm mt-3">A carregar...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -156,14 +169,22 @@ export default function HomeScreen() {
                     <Text className="font-semibold text-gray-900 text-sm">
                       {MEAL_LABELS[meal.meal_type] ?? meal.meal_type}
                     </Text>
-                    <View className="flex-row items-center gap-2">
-                      {meal.ai_analysis && (
-                        <Text className="text-xs text-gray-400">
-                          {meal.ai_analysis.macros.calories} kcal · score {meal.ai_analysis.score}/10
-                        </Text>
-                      )}
-                    </View>
+                    <Text className="text-xs text-gray-400">{timeAgo(meal.eaten_at)}</Text>
                   </View>
+                  {meal.ai_analysis && (
+                    <View className="flex-row gap-2 mb-2">
+                      {[
+                        { label: 'kcal', v: meal.ai_analysis.macros.calories },
+                        { label: 'prot', v: `${meal.ai_analysis.macros.protein_g}g` },
+                        { label: 'score', v: `${meal.ai_analysis.score}/10` },
+                      ].map((s) => (
+                        <View key={s.label} className="bg-gray-50 rounded-lg px-2 py-1 items-center">
+                          <Text className="text-xs font-bold text-gray-700">{s.v}</Text>
+                          <Text className="text-xs text-gray-400">{s.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
 
                   {meal.feedback_status === 'sent' && meal.nutritionist_feedback && (
                     <View className="bg-brand-50 rounded-xl px-3 py-2.5 mt-1">

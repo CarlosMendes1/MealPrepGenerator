@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ScrollView, Alert,
+  KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { supabase } from '@/services/supabase';
+import Toast from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const { toast, show: showToast, hide: hideToast } = useToast();
 
   async function signIn() {
     if (!email || !password) return;
@@ -17,7 +20,7 @@ export default function LoginScreen() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
-      Alert.alert('Erro', 'Email ou palavra-passe incorretos.');
+      showToast('Email ou palavra-passe incorretos.', 'error');
     } else {
       router.replace('/(tabs)/');
     }
@@ -28,6 +31,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       className="flex-1 bg-white"
     >
+      <Toast message={toast.message} type={toast.type} visible={toast.visible} onHide={hideToast} />
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View className="flex-1 px-6 pt-20 pb-8">
           <Text className="text-2xl font-bold text-brand-700 mb-12">NutriDesk</Text>
@@ -61,10 +65,16 @@ export default function LoginScreen() {
             </View>
           </View>
 
+          <Link href="/(auth)/forgot-password" asChild>
+            <TouchableOpacity className="items-end mt-1 mb-1">
+              <Text className="text-brand-600 text-sm">Esqueceste a palavra-passe?</Text>
+            </TouchableOpacity>
+          </Link>
+
           <TouchableOpacity
             onPress={signIn}
             disabled={loading}
-            className="bg-brand-600 rounded-xl py-4 mt-8 items-center"
+            className="bg-brand-600 rounded-xl py-4 mt-6 items-center"
           >
             <Text className="text-white font-semibold text-base">
               {loading ? 'A entrar...' : 'Entrar'}

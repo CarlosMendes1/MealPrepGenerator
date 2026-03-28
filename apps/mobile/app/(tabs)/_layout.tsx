@@ -1,7 +1,35 @@
+import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { Home, Camera, ClipboardList, User } from 'lucide-react-native';
+import { api } from '@/services/api';
+import { supabase } from '@/services/supabase';
 
 export default function TabsLayout() {
+  const [newFeedbackCount, setNewFeedbackCount] = useState(0);
+
+  async function loadFeedbackCount() {
+    try {
+      const meals = await api.get<any[]>('/api/meals?limit=50');
+      const count = meals.filter((m) => m.feedback_status === 'sent').length;
+      setNewFeedbackCount(count);
+    } catch {
+      // silently ignore
+    }
+  }
+
+  useEffect(() => {
+    loadFeedbackCount();
+
+    const channel = supabase
+      .channel('tab-badge-feedback')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'meals' }, () => {
+        loadFeedbackCount();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
@@ -37,6 +65,8 @@ export default function TabsLayout() {
         options={{
           title: 'Refeições',
           tabBarIcon: ({ color, size }) => <ClipboardList color={color} size={size} />,
+          tabBarBadge: newFeedbackCount > 0 ? newFeedbackCount : undefined,
+          tabBarBadgeStyle: { backgroundColor: '#16a34a', fontSize: 10 },
         }}
       />
       <Tabs.Screen

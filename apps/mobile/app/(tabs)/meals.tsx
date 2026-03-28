@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, RefreshControl, Image } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageSquare, Clock } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
+import { timeAgo } from '@/utils/time';
 
 interface Meal {
   id: string;
@@ -108,6 +109,7 @@ function groupMeals(meals: Meal[]): Array<{
 
 export default function MealsScreen() {
   const [meals, setMeals] = useState<Meal[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   async function load() {
@@ -116,6 +118,8 @@ export default function MealsScreen() {
       setMeals(data);
     } catch (err) {
       console.error('Failed to load meals:', err);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -157,7 +161,12 @@ export default function MealsScreen() {
         <View className="px-5 pt-6 pb-8">
           <Text className="text-2xl font-bold text-gray-900 mb-6">Histórico de refeições</Text>
 
-          {grouped.length === 0 ? (
+          {loading ? (
+            <View className="items-center py-16">
+              <ActivityIndicator size="large" color="#16a34a" />
+              <Text className="text-gray-400 text-sm mt-3">A carregar refeições...</Text>
+            </View>
+          ) : grouped.length === 0 ? (
             <View className="bg-white rounded-2xl border border-gray-100 py-12 items-center">
               <Text className="text-4xl mb-3">📋</Text>
               <Text className="text-gray-500 text-sm">Ainda sem refeições registadas.</Text>
@@ -192,7 +201,7 @@ export default function MealsScreen() {
                               {/* Thumbnail */}
                               <Image
                                 source={{ uri: meal.photo_url }}
-                                className="w-20 h-20 rounded-xl"
+                                className="w-28 h-28 rounded-xl"
                                 resizeMode="cover"
                               />
 
@@ -202,9 +211,7 @@ export default function MealsScreen() {
                                   <View className="flex-row items-center gap-1">
                                     <Clock size={11} color="#9ca3af" />
                                     <Text className="text-xs text-gray-400">
-                                      {new Date(meal.eaten_at).toLocaleTimeString('pt-PT', {
-                                        hour: '2-digit', minute: '2-digit',
-                                      })}
+                                      {timeAgo(meal.eaten_at)}
                                     </Text>
                                   </View>
                                   <View className={`px-2 py-0.5 rounded-full ${status.bg}`}>

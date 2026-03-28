@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { ChevronDown, ZoomIn, X } from 'lucide-react';
 import FeedbackEditor from './FeedbackEditor';
+import { timeAgo } from '@/lib/time';
 
 // ── Meal type config ───────────────────────────────────────────────────────────
 
@@ -262,10 +263,8 @@ export default function MealsSection({ meals, token }: Props) {
                                         </span>
                                       </div>
 
-                                      <p className="text-xs text-gray-400 mb-3">
-                                        {new Date(meal.eaten_at).toLocaleString('pt-PT', {
-                                          hour: '2-digit', minute: '2-digit',
-                                        })}
+                                      <p className="text-xs text-gray-400 mb-3" title={new Date(meal.eaten_at).toLocaleString('pt-PT')}>
+                                        {timeAgo(meal.eaten_at)}
                                       </p>
 
                                       {meal.client_notes && (

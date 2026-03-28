@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, Image, ScrollView, Alert,
+  View, Text, TouchableOpacity, Image, ScrollView,
   ActivityIndicator, TextInput, Modal, FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,6 +8,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Camera as CameraIcon, Image as ImageIcon, Check, X, ChevronDown } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { supabase } from '@/services/supabase';
+import Toast from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 
 type MealType =
   | 'breakfast'
@@ -35,11 +37,12 @@ export default function CameraScreen() {
   const [notes, setNotes] = useState('');
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
+  const { toast, show: showToast, hide: hideToast } = useToast();
 
   async function takePhoto() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permissão necessária', 'Precisa de acesso à câmara para fotografar refeições.');
+      showToast('Precisa de acesso à câmara para fotografar refeições.', 'error');
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -70,7 +73,7 @@ export default function CameraScreen() {
   async function uploadMeal() {
     if (!photo) return;
     if (!mealType) {
-      Alert.alert('Tipo de refeição', 'Por favor seleciona o tipo de refeição antes de enviar.');
+      showToast('Por favor seleciona o tipo de refeição antes de enviar.', 'info');
       return;
     }
     setUploading(true);
@@ -108,7 +111,7 @@ export default function CameraScreen() {
         router.push('/(tabs)/');
       }, 1500);
     } catch (err) {
-      Alert.alert('Erro', 'Não foi possível enviar a refeição. Tenta novamente.');
+      showToast('Não foi possível enviar a refeição. Tenta novamente.', 'error');
     } finally {
       setUploading(false);
     }
@@ -119,6 +122,7 @@ export default function CameraScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
+      <Toast message={toast.message} type={toast.type} visible={toast.visible} onHide={hideToast} />
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="px-5 pt-6 pb-8 flex-1">
           <Text className="text-2xl font-bold text-gray-900 mb-1">Registar refeição</Text>
