@@ -4,14 +4,8 @@
     "slug": "nutridesk",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "scheme": "nutridesk",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#16a34a"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nutridesk.app",
@@ -22,7 +16,6 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#16a34a"
       },
       "package": "com.nutridesk.app",
@@ -30,8 +23,7 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/favicon.png"
+      "output": "static"
     },
     "plugins": [
       "expo-router",
