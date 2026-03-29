@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { Check, Zap, Users2, ExternalLink } from 'lucide-react';
 import { getAuthenticatedUser } from '@/lib/supabase-server';
 import SettingsForm from './SettingsForm';
+import BillingButton from './BillingButton';
+import BillingToast from './BillingToast';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -60,7 +62,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('user_id, full_name, role, goal, individual_plan, created_at')
+    .select('user_id, full_name, role, goal, individual_plan, stripe_subscription_id, created_at')
     .eq('user_id', user.id)
     .single();
 
@@ -69,6 +71,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="p-8 max-w-3xl">
+      <BillingToast />
       <h1 className="text-2xl font-bold text-gray-900 mb-8">Definições</h1>
 
       {/* Profile form */}
@@ -134,19 +137,21 @@ export default async function SettingsPage() {
                   ))}
                 </ul>
 
-                <button
-                  disabled={'ctaDisabled' in plan && plan.ctaDisabled || isCurrent}
-                  onClick={() => alert('Integração Stripe em breve.')}
-                  className={`w-full py-2 rounded-xl text-xs font-semibold transition ${
-                    isCurrent
-                      ? 'bg-gray-100 text-gray-500 cursor-default'
-                      : plan.highlight
-                      ? 'bg-brand-600 hover:bg-brand-700 text-white'
-                      : 'bg-gray-900 hover:bg-gray-800 text-white'
-                  }`}
-                >
-                  {isCurrent ? 'Plano atual' : plan.cta}
-                </button>
+                {plan.key === 'free' || isCurrent ? (
+                  <button
+                    disabled
+                    className="w-full py-2 rounded-xl text-xs font-semibold bg-gray-100 text-gray-500 cursor-default"
+                  >
+                    {isCurrent ? 'Plano atual' : plan.cta}
+                  </button>
+                ) : (
+                  <BillingButton
+                    plan={plan.key === 'monthly' ? 'pro_monthly' : 'pro_annual'}
+                    token={session.access_token}
+                    label={plan.cta}
+                    highlight={!!plan.highlight}
+                  />
+                )}
               </div>
             );
           })}

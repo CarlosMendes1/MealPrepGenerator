@@ -45,6 +45,8 @@ export default function CreateOrganizationPage() {
       if (!session) { router.push('/login'); return; }
 
       const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
+      // Step 1: create the org
       const res = await fetch(`${API_URL}/api/organizations`, {
         method: 'POST',
         headers: {
@@ -60,6 +62,28 @@ export default function CreateOrganizationPage() {
         return;
       }
 
+      const { organization } = await res.json();
+
+      // Step 2: start Stripe checkout for the enterprise plan
+      const checkoutRes = await fetch(`${API_URL}/api/billing/enterprise/checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          org_id: organization.id,
+          billing_interval: billing,
+          seats,
+        }),
+      });
+
+      if (checkoutRes.ok) {
+        const { url } = await checkoutRes.json();
+        if (url) { window.location.href = url; return; }
+      }
+
+      // Fallback: go to team dashboard (trial started)
       router.push('/dashboard/team');
     } catch {
       setError('Erro de ligação. Tenta novamente.');
