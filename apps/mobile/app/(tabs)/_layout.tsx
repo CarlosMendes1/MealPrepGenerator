@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
-import { Home, Camera, ClipboardList, User } from 'lucide-react-native';
+import { Home, Camera, ClipboardList, User, Sparkles } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 
@@ -67,6 +67,14 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => <ClipboardList color={color} size={size} />,
           tabBarBadge: newFeedbackCount > 0 ? newFeedbackCount : undefined,
           tabBarBadgeStyle: { backgroundColor: '#16a34a', fontSize: 10 },
+        }}
+      />
+      <Tabs.Screen
+        name="coach"
+        options={{
+          title: 'Coach',
+          tabBarIcon: ({ color, size }) => <Sparkles color={color} size={size} />,
+          tabBarActiveTintColor: '#6366f1',
         }}
       />
       <Tabs.Screen

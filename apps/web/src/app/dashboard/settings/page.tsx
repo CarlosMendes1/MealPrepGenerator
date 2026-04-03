@@ -5,6 +5,7 @@ import { getAuthenticatedUser } from '@/lib/supabase-server';
 import SettingsForm from './SettingsForm';
 import BillingButton from './BillingButton';
 import BillingToast from './BillingToast';
+import CoachBillingButton from './CoachBillingButton';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -62,7 +63,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('user_id, full_name, role, goal, individual_plan, stripe_subscription_id, created_at')
+    .select('user_id, full_name, role, goal, individual_plan, stripe_subscription_id, ai_coach_enabled, created_at')
     .eq('user_id', user.id)
     .single();
 
@@ -156,6 +157,52 @@ export default async function SettingsPage() {
             );
           })}
         </div>
+
+        {/* AI Coach add-on */}
+        <section className="mt-8 mb-6">
+          <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Zap size={16} className="text-indigo-500" />
+            AI Coach
+          </h2>
+          <div className={`rounded-2xl border p-5 ${profile?.ai_coach_enabled ? 'border-indigo-200 bg-indigo-50' : 'border-gray-100 bg-white'}`}>
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <p className="font-semibold text-gray-900 text-sm mb-1">
+                  {profile?.ai_coach_enabled ? '✓ NutriCoach ativo' : 'NutriCoach — Assistente AI'}
+                </p>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  {profile?.ai_coach_enabled
+                    ? 'O teu assistente de nutrição AI está ativo. Acede à tab Coach na app mobile.'
+                    : 'Respostas em tempo real, análise automática de refeições e sugestões personalizadas. Disponível 24/7 na app mobile.'}
+                </p>
+              </div>
+              {profile?.ai_coach_enabled && (
+                <span className="shrink-0 text-xs font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-full">Ativo</span>
+              )}
+            </div>
+            {!profile?.ai_coach_enabled && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-xs font-semibold text-gray-700 mb-0.5">Mensal</p>
+                  <p className="text-lg font-bold text-gray-900">€9<span className="text-xs font-normal text-gray-400">/mês</span></p>
+                  <div className="mt-2">
+                    <CoachBillingButton plan="coach_monthly" token={session.access_token} label="Ativar mensal" />
+                  </div>
+                </div>
+                <div className="bg-indigo-600 rounded-xl p-3 relative">
+                  <span className="absolute -top-2.5 right-3 bg-white text-indigo-600 text-xs font-bold px-2 py-0.5 rounded-full">-17%</span>
+                  <p className="text-xs font-semibold text-indigo-200 mb-0.5">Anual</p>
+                  <p className="text-lg font-bold text-white">€79<span className="text-xs font-normal text-indigo-300">/ano</span></p>
+                  <p className="text-xs text-indigo-300 mb-2">≈ €6.58/mês</p>
+                  <CoachBillingButton plan="coach_annual" token={session.access_token} label="Ativar anual" />
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-gray-400 mt-3">
+              {profile?.ai_coach_enabled ? 'Gere a subscrição em qualquer momento.' : '7 dias de trial gratuito. Cancela quando quiseres.'}
+            </p>
+          </div>
+        </section>
 
         {/* Team upsell or manage */}
         {orgContext ? (

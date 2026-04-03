@@ -26,6 +26,7 @@ import dashboardRouter from './routes/dashboard.js';
 import organizationsRouter from './routes/organizations.js';
 import consultationsRouter from './routes/consultations.js';
 import billingRouter, { billingWebhookHandler } from './routes/billing.js';
+import coachRouter from './routes/coach.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -109,6 +110,7 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/organizations', organizationsRouter);
 app.use('/api/consultations', consultationsRouter);
 app.use('/api/billing', billingRouter);
+app.use('/api/coach', coachRouter);
 
 // ── Global error handler — never leak stack traces to clients ─────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

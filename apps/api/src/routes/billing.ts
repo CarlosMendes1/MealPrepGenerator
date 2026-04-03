@@ -265,6 +265,69 @@ router.post(
   }
 );
 
+// ── POST /api/billing/coach/checkout ─────────────────────────────────────────
+// AI Coach add-on — available to both nutritionists and clients
+router.post(
+  '/coach/checkout',
+  requireAuth,
+  async (req: AuthRequest, res: Response) => {
+    const { plan } = req.body as { plan: 'coach_monthly' | 'coach_annual' };
+
+    const priceId =
+      plan === 'coach_annual'
+        ? process.env.STRIPE_PRICE_AI_COACH_ANNUAL
+        : process.env.STRIPE_PRICE_AI_COACH_MONTHLY;
+
+    if (!priceId) {
+      res.status(500).json({ error: 'Stripe AI Coach price not configured' });
+      return;
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, stripe_customer_id, stripe_coach_subscription_id, ai_coach_enabled')
+      .eq('user_id', req.user!.id)
+      .single();
+
+    // Already subscribed → portal
+    if (profile?.stripe_coach_subscription_id) {
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: profile.stripe_customer_id!,
+        return_url: `${WEB_URL}/dashboard/settings?billing=coach_success`,
+      });
+      res.json({ url: portalSession.url });
+      return;
+    }
+
+    const customerId = await getOrCreateCustomer(
+      req.user!.id,
+      req.user!.email,
+      profile?.full_name ?? req.user!.email,
+    );
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'subscription',
+      payment_method_types: ['card', 'multibanco', 'mb_way'],
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${WEB_URL}/dashboard/settings?billing=coach_success`,
+      cancel_url:  `${WEB_URL}/dashboard/settings?billing=cancel`,
+      locale: 'pt',
+      subscription_data: {
+        trial_period_days: 7,
+        metadata: {
+          supabase_user_id: req.user!.id,
+          plan_type: 'ai_coach',
+          plan,
+        },
+      },
+      allow_promotion_codes: true,
+    });
+
+    res.json({ url: session.url });
+  }
+);
+
 // ── POST /api/billing/webhook ─────────────────────────────────────────────────
 // Stripe sends events here. Must use raw body (no JSON middleware).
 export function billingWebhookHandler(req: Request, res: Response) {
@@ -324,13 +387,18 @@ async function handleStripeEvent(event: Stripe.Event) {
           })
           .eq('id', orgId);
       } else if (userId) {
-        await supabase
-          .from('profiles')
-          .update({
-            individual_plan: 'free',
-            stripe_subscription_id: null,
-          })
-          .eq('user_id', userId);
+        const planType = sub.metadata?.plan_type as string;
+        if (planType === 'ai_coach') {
+          await supabase
+            .from('profiles')
+            .update({ ai_coach_enabled: false, stripe_coach_subscription_id: null })
+            .eq('user_id', userId);
+        } else {
+          await supabase
+            .from('profiles')
+            .update({ individual_plan: 'free', stripe_subscription_id: null })
+            .eq('user_id', userId);
+        }
       }
       break;
     }
@@ -383,8 +451,24 @@ async function activateSubscription(sub: Stripe.Subscription) {
       })
       .eq('id', orgId);
   } else if (userId) {
+    const planType = sub.metadata?.plan_type as string;
+
+    // AI Coach add-on — separate subscription
+    if (planType === 'ai_coach') {
+      const isActive = sub.status === 'active' || sub.status === 'trialing';
+      await supabase
+        .from('profiles')
+        .update({
+          ai_coach_enabled: isActive,
+          stripe_coach_subscription_id: isActive ? sub.id : null,
+        })
+        .eq('user_id', userId);
+      return;
+    }
+
+    // Individual plan
     const individual_plan =
-      plan === 'pro_annual' ? 'pro_annual' :
+      plan === 'pro_annual'  ? 'pro_annual'  :
       plan === 'pro_monthly' ? 'pro_monthly' :
       'free';
 

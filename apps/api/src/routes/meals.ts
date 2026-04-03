@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { supabase } from '../services/supabase.js';
 import { analyzeMealPhoto } from '../services/ai.js';
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.js';
+import { generateCoachMealFeedback } from './coach.js';
 import type { Goal } from '../types/index.js';
 
 const router = Router();
@@ -143,6 +144,9 @@ router.post(
         .from('meals')
         .update({ ai_analysis: analysis, ai_feedback_draft: feedbackDraft, feedback_status: 'draft' })
         .eq('id', meal.id);
+
+      // Fire-and-forget: generate AI Coach feedback (non-blocking, best-effort)
+      generateCoachMealFeedback(meal.id, req.userId!, analysis, mealType.data).catch(() => {});
 
       res.status(201).json({ ...meal, ai_analysis: analysis, ai_feedback_draft: feedbackDraft, feedback_status: 'draft' });
     } catch (aiError) {
