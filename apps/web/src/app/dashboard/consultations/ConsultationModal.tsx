@@ -89,7 +89,11 @@ export default function ConsultationModal({
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Erro ao guardar.'); return; }
+      if (!res.ok) {
+        const errMsg = typeof data.error === 'string' ? data.error : 'Erro ao guardar.';
+        setError(errMsg);
+        return;
+      }
 
       onSave({
         ...data,

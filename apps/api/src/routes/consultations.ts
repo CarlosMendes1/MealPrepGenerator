@@ -56,7 +56,11 @@ router.get('/', requireAuth, requireRole('nutritionist'), async (req: AuthReques
 
 router.post('/', requireAuth, requireRole('nutritionist'), async (req: AuthRequest, res) => {
   const parsed = consultationSchema.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
+  if (!parsed.success) {
+    const msg = parsed.error.errors.map((e) => e.message).join('; ');
+    res.status(400).json({ error: msg });
+    return;
+  }
 
   const { data, error } = await supabase
     .from('consultations')
@@ -77,7 +81,11 @@ router.post('/', requireAuth, requireRole('nutritionist'), async (req: AuthReque
 
 router.patch('/:id', requireAuth, requireRole('nutritionist'), async (req: AuthRequest, res) => {
   const parsed = consultationSchema.partial().safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
+  if (!parsed.success) {
+    const msg = parsed.error.errors.map((e) => e.message).join('; ');
+    res.status(400).json({ error: msg });
+    return;
+  }
 
   const { data, error } = await supabase
     .from('consultations')
