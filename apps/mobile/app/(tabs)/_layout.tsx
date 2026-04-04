@@ -1,11 +1,23 @@
 import { useEffect, useState } from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
+import { ActivityIndicator, View } from 'react-native';
 import { Home, Camera, ClipboardList, User, Sparkles } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
+import type { Session } from '@supabase/supabase-js';
 
 export default function TabsLayout() {
+  const [session, setSession]           = useState<Session | null | undefined>(undefined);
   const [newFeedbackCount, setNewFeedbackCount] = useState(0);
+
+  // Gate: verify session before rendering any tab screen
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
 
   async function loadFeedbackCount() {
     try {
@@ -18,6 +30,7 @@ export default function TabsLayout() {
   }
 
   useEffect(() => {
+    if (!session) return;
     loadFeedbackCount();
 
     const channel = supabase
@@ -28,7 +41,19 @@ export default function TabsLayout() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [session]);
+
+  // Still resolving session from storage
+  if (session === undefined) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#16a34a" />
+      </View>
+    );
+  }
+
+  // No session → redirect to login
+  if (!session) return <Redirect href="/(auth)/login" />;
 
   return (
     <Tabs
