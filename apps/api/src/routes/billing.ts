@@ -6,8 +6,17 @@ import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.j
 
 const router = Router();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
-  apiVersion: '2025-02-24.acacia',
+function getStripe(): Stripe {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error('STRIPE_SECRET_KEY is not configured');
+  return new Stripe(key, { apiVersion: '2025-02-24.acacia' });
+}
+let _stripe: Stripe | null = null;
+const stripe = new Proxy({} as Stripe, {
+  get(_target, prop) {
+    if (!_stripe) _stripe = getStripe();
+    return (_stripe as any)[prop];
+  },
 });
 
 const WEB_URL = process.env.WEB_URL ?? 'http://localhost:3000';
