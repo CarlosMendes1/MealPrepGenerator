@@ -6,28 +6,32 @@ import { supabase } from '@/services/supabase';
 import type { Session } from '@supabase/supabase-js';
 
 export default function RootLayout() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    // Get initial session and redirect immediately
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
+      setReady(true);
+      if (session) {
+        router.replace('/(tabs)/');
+      } else {
+        router.replace('/(auth)/login');
+      }
     });
 
+    // Keep listening for auth changes (login / logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (!session) {
-        router.replace('/(auth)/login');
-      } else {
+      if (session) {
         router.replace('/(tabs)/');
+      } else {
+        router.replace('/(auth)/login');
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  if (loading) return null;
+  if (!ready) return null;
 
   return (
     <>
