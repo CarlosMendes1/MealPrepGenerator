@@ -211,6 +211,20 @@ router.post('/join', requireAuth, requireRole('client'), async (req: AuthRequest
   res.json({ message: 'Successfully linked to nutritionist' });
 });
 
+// ── DELETE /clients/leave — client unlinks from their nutritionist ─────────
+router.delete('/leave', requireAuth, requireRole('client'), async (req: AuthRequest, res) => {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ nutritionist_id: null, updated_at: new Date().toISOString() })
+    .eq('user_id', req.userId!);
+
+  if (error) {
+    res.status(500).json({ error: 'Failed to unlink from nutritionist' });
+    return;
+  }
+  res.json({ message: 'Successfully unlinked from nutritionist' });
+});
+
 // ── Notes: shared helpers ──────────────────────────────────────────────────
 const noteSchema = z.object({
   content: z.string().min(1).max(2000).trim(),
