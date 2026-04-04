@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import Stripe from 'stripe';
+import { z } from 'zod';
 import { supabase } from '../services/supabase.js';
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.js';
 
@@ -11,16 +12,30 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
 
 const WEB_URL = process.env.WEB_URL ?? 'http://localhost:3000';
 
-// ── Price IDs (set in .env, created in Stripe dashboard) ─────────────────────
-// STRIPE_PRICE_PRO_MONTHLY        — €19/mês individual
-// STRIPE_PRICE_PRO_ANNUAL         — €190/ano individual
-// STRIPE_PRICE_ENTERPRISE_MONTHLY — €15/licença/mês (per-seat)
-// STRIPE_PRICE_ENTERPRISE_ANNUAL  — €12/licença/mês anual (per-seat)
+// ── Input schemas ─────────────────────────────────────────────────────────────
+
+const individualCheckoutSchema = z.object({
+  plan: z.enum(['pro_monthly', 'pro_annual']),
+});
+
+const enterpriseCheckoutSchema = z.object({
+  org_id:           z.string().uuid(),
+  billing_interval: z.enum(['monthly', 'annual']),
+  seats:            z.number().int().min(2).max(200),
+});
+
+const portalSchema = z.object({
+  context: z.enum(['individual', 'enterprise']),
+  org_id:  z.string().uuid().optional(),
+});
+
+const coachCheckoutSchema = z.object({
+  plan: z.enum(['coach_monthly', 'coach_annual']),
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function getOrCreateCustomer(userId: string, email: string, name: string) {
-  // Check if we already have a Stripe customer ID
   const { data: profile } = await supabase
     .from('profiles')
     .select('stripe_customer_id')
@@ -31,7 +46,6 @@ async function getOrCreateCustomer(userId: string, email: string, name: string) 
     return profile.stripe_customer_id as string;
   }
 
-  // Create a new Stripe customer
   const customer = await stripe.customers.create({
     email,
     name,
@@ -72,18 +86,21 @@ async function getOrCreateOrgCustomer(orgId: string, ownerEmail: string, orgName
 }
 
 // ── POST /api/billing/individual/checkout ─────────────────────────────────────
-// Creates a Stripe Checkout session for individual plans (Pro Monthly / Pro Annual)
 router.post(
   '/individual/checkout',
   requireAuth,
   requireRole('nutritionist'),
   async (req: AuthRequest, res: Response) => {
-    const { plan } = req.body as { plan: 'pro_monthly' | 'pro_annual' };
+    const parsed = individualCheckoutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    const { plan } = parsed.data;
 
-    const priceId =
-      plan === 'pro_monthly'
-        ? process.env.STRIPE_PRICE_PRO_MONTHLY
-        : process.env.STRIPE_PRICE_PRO_ANNUAL;
+    const priceId = plan === 'pro_monthly'
+      ? process.env.STRIPE_PRICE_PRO_MONTHLY
+      : process.env.STRIPE_PRICE_PRO_ANNUAL;
 
     if (!priceId) {
       res.status(500).json({ error: 'Stripe price not configured' });
@@ -92,11 +109,11 @@ router.post(
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, stripe_customer_id, stripe_subscription_id, individual_plan')
-      .eq('user_id', req.user!.id)
+      .select('full_name, stripe_customer_id, stripe_subscription_id')
+      .eq('user_id', req.userId!)
       .single();
 
-    // Already has active subscription → redirect to portal
+    // Already subscribed → portal
     if (profile?.stripe_subscription_id) {
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: profile.stripe_customer_id!,
@@ -106,10 +123,11 @@ router.post(
       return;
     }
 
+    const email = req.userEmail ?? '';
     const customerId = await getOrCreateCustomer(
-      req.user!.id,
-      req.user!.email,
-      profile?.full_name ?? req.user!.email,
+      req.userId!,
+      email,
+      profile?.full_name ?? email,
     );
 
     const session = await stripe.checkout.sessions.create({
@@ -122,7 +140,7 @@ router.post(
       locale: 'pt',
       subscription_data: {
         metadata: {
-          supabase_user_id: req.user!.id,
+          supabase_user_id: req.userId!,
           plan_type: 'individual',
           plan,
         },
@@ -135,29 +153,24 @@ router.post(
 );
 
 // ── POST /api/billing/enterprise/checkout ─────────────────────────────────────
-// Creates a Stripe Checkout session for enterprise (per-seat)
 router.post(
   '/enterprise/checkout',
   requireAuth,
   requireRole('nutritionist'),
   async (req: AuthRequest, res: Response) => {
-    const { org_id, billing_interval, seats } = req.body as {
-      org_id: string;
-      billing_interval: 'monthly' | 'annual';
-      seats: number;
-    };
-
-    if (!org_id || !billing_interval || !seats || seats < 2) {
-      res.status(400).json({ error: 'org_id, billing_interval and seats (min 2) are required' });
+    const parsed = enterpriseCheckoutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
+    const { org_id, billing_interval, seats } = parsed.data;
 
     // Confirm requester is org owner
     const { data: member } = await supabase
       .from('organization_members')
       .select('role')
       .eq('organization_id', org_id)
-      .eq('user_id', req.user!.id)
+      .eq('user_id', req.userId!)
       .not('joined_at', 'is', null)
       .maybeSingle();
 
@@ -166,10 +179,9 @@ router.post(
       return;
     }
 
-    const priceId =
-      billing_interval === 'monthly'
-        ? process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY
-        : process.env.STRIPE_PRICE_ENTERPRISE_ANNUAL;
+    const priceId = billing_interval === 'monthly'
+      ? process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY
+      : process.env.STRIPE_PRICE_ENTERPRISE_ANNUAL;
 
     if (!priceId) {
       res.status(500).json({ error: 'Stripe enterprise price not configured' });
@@ -197,7 +209,11 @@ router.post(
       return;
     }
 
-    const customerId = await getOrCreateOrgCustomer(org_id, req.user!.email, org.name);
+    const customerId = await getOrCreateOrgCustomer(
+      org_id,
+      req.userEmail ?? '',
+      org.name,
+    );
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -223,18 +239,36 @@ router.post(
 );
 
 // ── POST /api/billing/portal ──────────────────────────────────────────────────
-// Returns a Stripe Customer Portal URL to manage subscriptions
 router.post(
   '/portal',
   requireAuth,
   requireRole('nutritionist'),
   async (req: AuthRequest, res: Response) => {
-    const { context, org_id } = req.body as { context: 'individual' | 'enterprise'; org_id?: string };
+    const parsed = portalSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    const { context, org_id } = parsed.data;
 
     let customerId: string | null = null;
     let returnUrl = `${WEB_URL}/dashboard/settings`;
 
     if (context === 'enterprise' && org_id) {
+      // Verify requester is actually a member of that org
+      const { data: membership } = await supabase
+        .from('organization_members')
+        .select('role')
+        .eq('organization_id', org_id)
+        .eq('user_id', req.userId!)
+        .not('joined_at', 'is', null)
+        .maybeSingle();
+
+      if (!membership) {
+        res.status(403).json({ error: 'Not a member of this organization' });
+        return;
+      }
+
       const { data: org } = await supabase
         .from('organizations')
         .select('stripe_customer_id')
@@ -246,7 +280,7 @@ router.post(
       const { data: profile } = await supabase
         .from('profiles')
         .select('stripe_customer_id')
-        .eq('user_id', req.user!.id)
+        .eq('user_id', req.userId!)
         .single();
       customerId = profile?.stripe_customer_id ?? null;
     }
@@ -266,17 +300,20 @@ router.post(
 );
 
 // ── POST /api/billing/coach/checkout ─────────────────────────────────────────
-// AI Coach add-on — available to both nutritionists and clients
 router.post(
   '/coach/checkout',
   requireAuth,
   async (req: AuthRequest, res: Response) => {
-    const { plan } = req.body as { plan: 'coach_monthly' | 'coach_annual' };
+    const parsed = coachCheckoutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    const { plan } = parsed.data;
 
-    const priceId =
-      plan === 'coach_annual'
-        ? process.env.STRIPE_PRICE_AI_COACH_ANNUAL
-        : process.env.STRIPE_PRICE_AI_COACH_MONTHLY;
+    const priceId = plan === 'coach_annual'
+      ? process.env.STRIPE_PRICE_AI_COACH_ANNUAL
+      : process.env.STRIPE_PRICE_AI_COACH_MONTHLY;
 
     if (!priceId) {
       res.status(500).json({ error: 'Stripe AI Coach price not configured' });
@@ -285,8 +322,8 @@ router.post(
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, stripe_customer_id, stripe_coach_subscription_id, ai_coach_enabled')
-      .eq('user_id', req.user!.id)
+      .select('full_name, stripe_customer_id, stripe_coach_subscription_id')
+      .eq('user_id', req.userId!)
       .single();
 
     // Already subscribed → portal
@@ -299,10 +336,11 @@ router.post(
       return;
     }
 
+    const email = req.userEmail ?? '';
     const customerId = await getOrCreateCustomer(
-      req.user!.id,
-      req.user!.email,
-      profile?.full_name ?? req.user!.email,
+      req.userId!,
+      email,
+      profile?.full_name ?? email,
     );
 
     const session = await stripe.checkout.sessions.create({
@@ -316,7 +354,7 @@ router.post(
       subscription_data: {
         trial_period_days: 7,
         metadata: {
-          supabase_user_id: req.user!.id,
+          supabase_user_id: req.userId!,
           plan_type: 'ai_coach',
           plan,
         },
@@ -329,9 +367,9 @@ router.post(
 );
 
 // ── POST /api/billing/webhook ─────────────────────────────────────────────────
-// Stripe sends events here. Must use raw body (no JSON middleware).
+// Must use raw body — registered BEFORE json middleware in index.ts
 export function billingWebhookHandler(req: Request, res: Response) {
-  const sig = req.headers['stripe-signature'] as string;
+  const sig    = req.headers['stripe-signature'] as string;
   const secret = process.env.STRIPE_WEBHOOK_SECRET ?? '';
 
   let event: Stripe.Event;
@@ -343,6 +381,7 @@ export function billingWebhookHandler(req: Request, res: Response) {
     return;
   }
 
+  // Handle asynchronously — always return 200 fast to avoid Stripe retries
   handleStripeEvent(event).catch((e) =>
     console.error('Stripe webhook handler error:', e)
   );
@@ -354,131 +393,112 @@ export function billingWebhookHandler(req: Request, res: Response) {
 
 async function handleStripeEvent(event: Stripe.Event) {
   switch (event.type) {
-
-    // ── Checkout completed ─────────────────────────────────────────────────
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
       if (session.mode !== 'subscription') break;
-
       const sub = await stripe.subscriptions.retrieve(session.subscription as string);
       await activateSubscription(sub);
       break;
     }
-
-    // ── Subscription updated (plan change, renewal, trial end) ────────────
     case 'customer.subscription.updated': {
       const sub = event.data.object as Stripe.Subscription;
       await activateSubscription(sub);
       break;
     }
-
-    // ── Subscription cancelled ────────────────────────────────────────────
     case 'customer.subscription.deleted': {
       const sub = event.data.object as Stripe.Subscription;
-      const orgId = sub.metadata?.supabase_org_id;
-      const userId = sub.metadata?.supabase_user_id;
+      await deactivateSubscription(sub);
+      break;
+    }
+    case 'invoice.payment_failed': {
+      const invoice  = event.data.object as Stripe.Invoice;
+      const meta     = invoice.subscription_details?.metadata as Record<string, string> | undefined;
+      const orgId    = meta?.supabase_org_id;
+      const userId   = meta?.supabase_user_id;
+      const planType = meta?.plan_type;
 
       if (orgId) {
-        await supabase
-          .from('organizations')
-          .update({
-            subscription_status: 'cancelled',
-            stripe_subscription_id: null,
-          })
-          .eq('id', orgId);
+        await supabase.from('organizations').update({ subscription_status: 'past_due' }).eq('id', orgId);
       } else if (userId) {
-        const planType = sub.metadata?.plan_type as string;
         if (planType === 'ai_coach') {
-          await supabase
-            .from('profiles')
-            .update({ ai_coach_enabled: false, stripe_coach_subscription_id: null })
-            .eq('user_id', userId);
+          await supabase.from('profiles').update({ ai_coach_enabled: false }).eq('user_id', userId);
         } else {
-          await supabase
-            .from('profiles')
-            .update({ individual_plan: 'free', stripe_subscription_id: null })
-            .eq('user_id', userId);
+          await supabase.from('profiles').update({ individual_plan: 'free' }).eq('user_id', userId);
         }
       }
       break;
     }
-
-    // ── Payment failed ─────────────────────────────────────────────────────
-    case 'invoice.payment_failed': {
-      const invoice = event.data.object as Stripe.Invoice;
-      const orgId  = (invoice.subscription_details?.metadata as Record<string,string>)?.supabase_org_id;
-      const userId = (invoice.subscription_details?.metadata as Record<string,string>)?.supabase_user_id;
-
-      if (orgId) {
-        await supabase
-          .from('organizations')
-          .update({ subscription_status: 'past_due' })
-          .eq('id', orgId);
-      } else if (userId) {
-        await supabase
-          .from('profiles')
-          .update({ individual_plan: 'free' })
-          .eq('user_id', userId);
-      }
-      break;
-    }
-
     default:
       break;
   }
 }
 
 async function activateSubscription(sub: Stripe.Subscription) {
-  const orgId  = sub.metadata?.supabase_org_id;
-  const userId = sub.metadata?.supabase_user_id;
-  const plan   = sub.metadata?.plan as string;
-  const seats  = sub.metadata?.seats ? parseInt(sub.metadata.seats, 10) : undefined;
+  const orgId    = sub.metadata?.supabase_org_id;
+  const userId   = sub.metadata?.supabase_user_id;
+  const plan     = sub.metadata?.plan as string;
+  const planType = sub.metadata?.plan_type as string;
+  const seats    = sub.metadata?.seats ? parseInt(sub.metadata.seats, 10) : undefined;
 
-  const status = sub.status === 'active' || sub.status === 'trialing'
-    ? 'active'
-    : sub.status === 'past_due'
-    ? 'past_due'
-    : 'cancelled';
+  const isActive = sub.status === 'active' || sub.status === 'trialing';
+  const status   = isActive ? 'active' : sub.status === 'past_due' ? 'past_due' : 'cancelled';
 
   if (orgId) {
-    await supabase
-      .from('organizations')
-      .update({
-        subscription_status: status,
-        stripe_subscription_id: sub.id,
-        ...(seats ? { max_members: seats } : {}),
-        billing_interval: sub.metadata?.billing_interval ?? 'monthly',
-      })
-      .eq('id', orgId);
-  } else if (userId) {
-    const planType = sub.metadata?.plan_type as string;
+    await supabase.from('organizations').update({
+      subscription_status: status,
+      stripe_subscription_id: sub.id,
+      ...(seats ? { max_members: seats } : {}),
+      billing_interval: sub.metadata?.billing_interval ?? 'monthly',
+    }).eq('id', orgId);
+    return;
+  }
 
-    // AI Coach add-on — separate subscription
-    if (planType === 'ai_coach') {
-      const isActive = sub.status === 'active' || sub.status === 'trialing';
-      await supabase
-        .from('profiles')
-        .update({
-          ai_coach_enabled: isActive,
-          stripe_coach_subscription_id: isActive ? sub.id : null,
-        })
-        .eq('user_id', userId);
-      return;
-    }
+  if (!userId) return;
 
-    // Individual plan
-    const individual_plan =
-      plan === 'pro_annual'  ? 'pro_annual'  :
-      plan === 'pro_monthly' ? 'pro_monthly' :
-      'free';
+  if (planType === 'ai_coach') {
+    await supabase.from('profiles').update({
+      ai_coach_enabled: isActive,
+      stripe_coach_subscription_id: isActive ? sub.id : null,
+    }).eq('user_id', userId);
+    return;
+  }
 
-    await supabase
-      .from('profiles')
-      .update({
-        individual_plan,
-        stripe_subscription_id: sub.id,
-      })
-      .eq('user_id', userId);
+  const individual_plan =
+    plan === 'pro_annual'  ? 'pro_annual'  :
+    plan === 'pro_monthly' ? 'pro_monthly' :
+    'free';
+
+  await supabase.from('profiles').update({
+    individual_plan,
+    stripe_subscription_id: sub.id,
+  }).eq('user_id', userId);
+}
+
+async function deactivateSubscription(sub: Stripe.Subscription) {
+  const orgId    = sub.metadata?.supabase_org_id;
+  const userId   = sub.metadata?.supabase_user_id;
+  const planType = sub.metadata?.plan_type as string;
+
+  if (orgId) {
+    await supabase.from('organizations').update({
+      subscription_status: 'cancelled',
+      stripe_subscription_id: null,
+    }).eq('id', orgId);
+    return;
+  }
+
+  if (!userId) return;
+
+  if (planType === 'ai_coach') {
+    await supabase.from('profiles').update({
+      ai_coach_enabled: false,
+      stripe_coach_subscription_id: null,
+    }).eq('user_id', userId);
+  } else {
+    await supabase.from('profiles').update({
+      individual_plan: 'free',
+      stripe_subscription_id: null,
+    }).eq('user_id', userId);
   }
 }
 

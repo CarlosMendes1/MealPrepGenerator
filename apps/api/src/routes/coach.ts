@@ -1,5 +1,6 @@
 import { Router, type Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
+import { z } from 'zod';
 import { supabase } from '../services/supabase.js';
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.js';
 import { buildCoachContext } from '../lib/coachContext.js';
@@ -8,10 +9,16 @@ const router = Router();
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ── Stub assistant turn that anchors the volatile context ─────────────────────
-// Placed after recentContextMessage in messages[], keeping the cached system
-// prompt prefix completely stable across requests.
+// Stub assistant turn anchoring the volatile context in the messages array.
+// Kept stable so it doesn't break the system-prompt cache prefix.
 const CONTEXT_ACK = 'Entendido. Estou a par do teu progresso recente. Como posso ajudar?';
+
+// ── Input schemas ─────────────────────────────────────────────────────────────
+
+const chatSchema = z.object({
+  // Client MUST NOT send history — we load it from DB to prevent injection
+  message: z.string().trim().min(1).max(2000),
+});
 
 // ── GET /api/coach/history ────────────────────────────────────────────────────
 router.get('/history', requireAuth, requireRole('client'), async (req: AuthRequest, res) => {
@@ -28,23 +35,24 @@ router.get('/history', requireAuth, requireRole('client'), async (req: AuthReque
 
 // ── POST /api/coach/chat — streaming SSE ──────────────────────────────────────
 //
-// Body: { message: string, history?: { role: 'user'|'assistant', content: string }[] }
-//
 // Response: text/event-stream
-//   data: {"text": "<delta>"}        — one per token chunk
-//   data: [DONE]                     — stream complete
-//   data: {"error": "<message>"}     — on failure
+//   data: {"text": "<delta>"}   — per token
+//   data: [DONE]                — stream complete
+//   data: {"error": "..."}      — on failure
+//
+// Security notes:
+//  - History is loaded from DB, never from client (prevents prompt injection)
+//  - AbortController terminates the Anthropic stream if client disconnects
+//    (prevents wasting API credits on orphaned requests)
+//  - Rate limited by aiLimiter (30 req / 15 min) in index.ts
 //
 router.post('/chat', requireAuth, requireRole('client'), async (req: AuthRequest, res: Response) => {
-  const { message, history = [] } = req.body as {
-    message: string;
-    history?: Array<{ role: 'user' | 'assistant'; content: string }>;
-  };
-
-  if (!message?.trim()) {
-    res.status(400).json({ error: 'message is required' });
+  const parsed = chatSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
+  const { message } = parsed.data;
 
   const ctx = await buildCoachContext(req.userId!);
 
@@ -56,47 +64,61 @@ router.post('/chat', requireAuth, requireRole('client'), async (req: AuthRequest
     return;
   }
 
-  // ── Build message history ────────────────────────────────────────────────
-  // Structure:
-  //   [volatile context (user)] → [context ack (assistant)] → [...history] → [new message]
-  //
-  // The system blocks (with cache_control) sit in `system` — before all messages.
-  // Any byte change there would bust the cache; volatile content is deliberately
-  // kept in the messages array so the stable system prefix is never touched.
+  // Load last 12 messages from DB — never trust client-supplied history
+  const { data: dbHistory } = await supabase
+    .from('coach_messages')
+    .select('role, content')
+    .eq('user_id', req.userId!)
+    .order('created_at', { ascending: false })
+    .limit(12);
+
+  // DB returns newest first; Claude needs oldest first
+  const history = (dbHistory ?? []).reverse() as Array<{ role: 'user' | 'assistant'; content: string }>;
+
   const messages: Anthropic.MessageParam[] = [
     { role: 'user',      content: ctx.recentContextMessage },
     { role: 'assistant', content: CONTEXT_ACK },
-    // Keep last 12 turns (~6 exchanges) to bound context window growth
-    ...history.slice(-12).map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user', content: message.trim() },
+    ...history.map((m) => ({ role: m.role, content: m.content })),
+    { role: 'user',      content: message },
   ];
 
-  // Persist user message before streaming (fire-and-forget; no await)
+  // Persist user message (fire-and-forget)
   supabase.from('coach_messages').insert({
     user_id: req.userId!,
     role: 'user',
-    content: message.trim(),
+    content: message,
   }).then(() => {}).catch(() => {});
 
   // ── SSE headers ──────────────────────────────────────────────────────────
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
+
+  // ── Abort stream when client disconnects ──────────────────────────────────
+  // Without this, the Anthropic API call continues burning tokens even after
+  // the client has closed the connection (tab close, navigation, app kill).
+  const controller = new AbortController();
+  req.on('close', () => controller.abort());
 
   let fullResponse = '';
 
   try {
-    const stream = anthropic.messages.stream({
-      model: 'claude-opus-4-6',
-      max_tokens: 1024,
-      thinking: { type: 'adaptive' },
-      system: ctx.systemBlocks as Anthropic.TextBlockParam[],
-      messages,
-    });
+    const stream = anthropic.messages.stream(
+      {
+        model: 'claude-opus-4-6',
+        max_tokens: 1024,
+        thinking: { type: 'adaptive' },
+        system: ctx.systemBlocks as Anthropic.TextBlockParam[],
+        messages,
+      },
+      { signal: controller.signal }
+    );
 
     for await (const event of stream) {
+      if (controller.signal.aborted) break;
+
       if (
         event.type === 'content_block_delta' &&
         event.delta.type === 'text_delta'
@@ -106,7 +128,7 @@ router.post('/chat', requireAuth, requireRole('client'), async (req: AuthRequest
       }
     }
 
-    // Persist assistant response (non-blocking)
+    // Persist assistant response (fire-and-forget)
     if (fullResponse) {
       supabase.from('coach_messages').insert({
         user_id: req.userId!,
@@ -115,9 +137,16 @@ router.post('/chat', requireAuth, requireRole('client'), async (req: AuthRequest
       }).then(() => {}).catch(() => {});
     }
 
-    res.write('data: [DONE]\n\n');
+    if (!controller.signal.aborted) {
+      res.write('data: [DONE]\n\n');
+    }
   } catch (err) {
+    // AbortError is expected when client disconnects — not a real error
+    if (err instanceof Error && err.name === 'AbortError') {
+      return;
+    }
     console.error('[Coach] stream error:', err instanceof Error ? err.message : err);
+    if (!res.headersSent) return;
     res.write(`data: ${JSON.stringify({ error: 'Erro ao processar resposta. Tenta novamente.' })}\n\n`);
   } finally {
     res.end();
@@ -125,8 +154,9 @@ router.post('/chat', requireAuth, requireRole('client'), async (req: AuthRequest
 });
 
 // ── generateCoachMealFeedback ─────────────────────────────────────────────────
-// Called internally from meals.ts after a meal is analysed.
-// Non-blocking — caller does NOT await this.
+// Called fire-and-forget from meals.ts after a meal is analysed.
+// Uses Haiku (fast + cheap) for brief 1-2 sentence feedback.
+// Silently skips if coach is not enabled or context unavailable.
 //
 export async function generateCoachMealFeedback(
   mealId: string,
@@ -150,7 +180,6 @@ export async function generateCoachMealFeedback(
       `Pontuação de alinhamento com objetivo: ${analysis.score}/10\n\n` +
       `Gera um comentário NutriCoach curto (1-2 frases). Específico, encorajador e prático.`;
 
-    // Use Haiku for auto-feedback — fast and cheap; no streaming needed
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 200,
@@ -170,7 +199,7 @@ export async function generateCoachMealFeedback(
       .update({ coach_feedback: block.text })
       .eq('id', mealId);
   } catch (err) {
-    // Auto-feedback is best-effort; never throw
+    // Best-effort — never propagate errors upstream
     console.error('[Coach] meal feedback error:', err instanceof Error ? err.message : err);
   }
 }

@@ -105,7 +105,7 @@ router.post('/', requireAuth, requireRole('nutritionist'), async (req: AuthReque
     joined_at:       new Date().toISOString(),
   });
 
-  res.status(201).json(org);
+  res.status(201).json({ organization: org });
 });
 
 // ── GET /organizations/:id/members ────────────────────────────────────────────
@@ -132,42 +132,73 @@ router.get('/:orgId/members', requireAuth, requireRole('nutritionist'), async (r
 
   if (error) { res.status(500).json({ error: 'Failed to fetch members' }); return; }
 
-  // Enrich with profile data + stats
-  const enriched = await Promise.all((members ?? []).map(async (m) => {
+  // ── Batch-enrich: 3 queries for N members instead of 3N ────────────────
+  const activeUserIds = (members ?? []).map((m) => m.user_id).filter(Boolean) as string[];
+
+  const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+
+  const [profilesResult, clientCountsResult, mealsResult] = await Promise.all([
+    // Batch 1: all profiles at once
+    activeUserIds.length
+      ? supabase.from('profiles').select('user_id, full_name').in('user_id', activeUserIds)
+      : Promise.resolve({ data: [] }),
+
+    // Batch 2: all org clients with their assigned nutritionist
+    activeUserIds.length
+      ? supabase
+          .from('profiles')
+          .select('nutritionist_id')
+          .eq('organization_id', orgId)
+          .eq('role', 'client')
+          .in('nutritionist_id', activeUserIds)
+      : Promise.resolve({ data: [] }),
+
+    // Batch 3: recent meal scores for all members
+    activeUserIds.length
+      ? supabase
+          .from('meals')
+          .select('client_id, ai_analysis')
+          .in('client_id', activeUserIds) // meals table uses client_id as the client
+          .gte('eaten_at', since)
+          .not('ai_analysis', 'is', null)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  // Build lookup maps
+  const profileMap = new Map(
+    (profilesResult.data ?? []).map((p: any) => [p.user_id, p.full_name as string | null])
+  );
+
+  const clientCountMap = new Map<string, number>();
+  for (const c of clientCountsResult.data ?? []) {
+    const nid = (c as any).nutritionist_id as string;
+    clientCountMap.set(nid, (clientCountMap.get(nid) ?? 0) + 1);
+  }
+
+  const scoreMap = new Map<string, number[]>();
+  for (const m of mealsResult.data ?? []) {
+    const uid = (m as any).client_id as string;
+    const score = (m as any).ai_analysis?.score;
+    if (typeof score === 'number') {
+      const arr = scoreMap.get(uid) ?? [];
+      arr.push(score);
+      scoreMap.set(uid, arr);
+    }
+  }
+
+  const enriched = (members ?? []).map((m) => {
     if (!m.user_id) return { ...m, full_name: null, client_count: 0, avg_adherence: null };
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('full_name')
-      .eq('user_id', m.user_id)
-      .single();
-
-    const { count: clientCount } = await supabase
-      .from('profiles')
-      .select('user_id', { count: 'exact', head: true })
-      .eq('nutritionist_id', m.user_id)
-      .eq('organization_id', orgId)
-      .eq('role', 'client');
-
-    // Avg adherence last 7 days
-    const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
-    const { data: meals } = await supabase
-      .from('meals')
-      .select('ai_analysis')
-      .eq('nutritionist_id', m.user_id)
-      .gte('eaten_at', since)
-      .not('ai_analysis', 'is', null);
-
-    const scores = (meals ?? [])
-      .map((meal: any) => meal.ai_analysis?.score)
-      .filter((s: any) => typeof s === 'number');
-
+    const scores = scoreMap.get(m.user_id) ?? [];
     const avg_adherence = scores.length
-      ? Math.round((scores.reduce((a: number, b: number) => a + b, 0) / scores.length) * 10) / 10
+      ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
       : null;
-
-    return { ...m, full_name: profile?.full_name ?? null, client_count: clientCount ?? 0, avg_adherence };
-  }));
+    return {
+      ...m,
+      full_name:     profileMap.get(m.user_id) ?? null,
+      client_count:  clientCountMap.get(m.user_id) ?? 0,
+      avg_adherence,
+    };
+  });
 
   res.json(enriched);
 });
@@ -298,7 +329,12 @@ router.post('/invitations/:token/accept', requireAuth, requireRole('nutritionist
 
 router.patch('/:orgId/members/:memberId', requireAuth, requireRole('nutritionist'), async (req: AuthRequest, res) => {
   const { orgId, memberId } = req.params;
-  const { role } = z.object({ role: z.enum(['admin', 'member']) }).parse(req.body);
+  const roleParsed = z.object({ role: z.enum(['admin', 'member']) }).safeParse(req.body);
+  if (!roleParsed.success) {
+    res.status(400).json({ error: roleParsed.error.flatten() });
+    return;
+  }
+  const { role } = roleParsed.data;
 
   const isAdmin = await assertOrgAdmin(req.userId!, orgId);
   if (!isAdmin) { res.status(403).json({ error: 'Admin access required.' }); return; }

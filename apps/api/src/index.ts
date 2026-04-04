@@ -95,6 +95,15 @@ const aiLimiter = rateLimit({
   message: { error: 'Too many AI requests. Please try again later.' },
 });
 
+// Coach chat uses Opus 4.6 — most expensive model. Extra tight: 15 req / 15 min.
+const coachLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 15,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many coach requests. Please slow down.' },
+});
+
 app.use(globalLimiter);
 
 // ── Health check (unauthenticated, no rate limit side-effect) ─────────────
@@ -110,7 +119,7 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/organizations', organizationsRouter);
 app.use('/api/consultations', consultationsRouter);
 app.use('/api/billing', billingRouter);
-app.use('/api/coach', coachRouter);
+app.use('/api/coach', coachLimiter, coachRouter);
 
 // ── Global error handler — never leak stack traces to clients ─────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

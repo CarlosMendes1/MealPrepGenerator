@@ -67,15 +67,21 @@ router.get('/', requireAuth, requireRole('nutritionist'), async (req: AuthReques
     return;
   }
 
-  const clientsWithCounts = await Promise.all(
-    (data ?? []).map(async (client) => {
-      const { count } = await supabase
-        .from('meals')
-        .select('*', { count: 'exact', head: true })
-        .eq('client_id', client.user_id);
-      return { ...client, meals: [{ count: count ?? 0 }] };
-    })
-  );
+  // Single batch query for all meal counts — avoids N+1
+  const clientIds = (data ?? []).map((c) => c.user_id);
+  const { data: mealRows } = clientIds.length
+    ? await supabase.from('meals').select('client_id').in('client_id', clientIds)
+    : { data: [] };
+
+  const mealCountMap = new Map<string, number>();
+  for (const row of mealRows ?? []) {
+    mealCountMap.set(row.client_id, (mealCountMap.get(row.client_id) ?? 0) + 1);
+  }
+
+  const clientsWithCounts = (data ?? []).map((client) => ({
+    ...client,
+    meals: [{ count: mealCountMap.get(client.user_id) ?? 0 }],
+  }));
 
   res.json(clientsWithCounts);
 });
