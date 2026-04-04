@@ -1,6 +1,12 @@
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
+// Android emulator uses 10.0.2.2 to reach the host machine's localhost
+const DEFAULT_API_URL = Platform.OS === 'android'
+  ? 'http://10.0.2.2:3001'
+  : 'http://localhost:3001';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL;
 
 async function getToken(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
