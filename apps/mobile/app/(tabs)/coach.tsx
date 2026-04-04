@@ -12,7 +12,7 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Sparkles, Send, Zap, Lock, ArrowRight } from 'lucide-react-native';
+import { Sparkles, Send, Zap, Lock, ArrowRight, UserCheck } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { router } from 'expo-router';
 
@@ -149,15 +149,45 @@ function UpsellScreen() {
   );
 }
 
+// ── Blocked screen (has human nutritionist) ───────────────────────────────────
+
+function BlockedScreen() {
+  return (
+    <View style={styles.upsellContainer}>
+      <View style={styles.upsellCard}>
+        <View style={[styles.upsellIconCircle, { backgroundColor: '#f3f4f6' }]}>
+          <UserCheck size={32} color="#6b7280" />
+        </View>
+        <Text style={styles.upsellTitle}>Coach não disponível</Text>
+        <Text style={styles.upsellSubtitle}>
+          Já tens um nutricionista a acompanhar-te. O NutriCoach AI está desativado para não interferir com o teu acompanhamento humano.
+        </Text>
+
+        <View style={[styles.upsellPriceCard, { backgroundColor: '#f0fdf4', marginBottom: 0 }]}>
+          <UserCheck size={14} color="#16a34a" />
+          <Text style={[styles.upsellPriceText, { color: '#16a34a' }]}>
+            O teu nutricionista está a acompanhar-te
+          </Text>
+        </View>
+
+        <Text style={[styles.upsellNote, { marginTop: 20 }]}>
+          Se tiveres dúvidas rápidas, fala com o teu nutricionista através da consulta agendada.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 // ── Main coach screen ─────────────────────────────────────────────────────────
 
 export default function CoachScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput]       = useState('');
-  const [loading, setLoading]   = useState(true);
-  const [sending, setSending]   = useState(false);
-  const [enabled, setEnabled]   = useState(false);
-  const [token, setToken]       = useState<string | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [sending, setSending]         = useState(false);
+  const [enabled, setEnabled]         = useState(false);
+  const [hasNutritionist, setHasNutritionist] = useState(false);
+  const [token, setToken]             = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   // ── Load profile + history ─────────────────────────────────────────────
@@ -168,13 +198,14 @@ export default function CoachScreen() {
         if (!session) { setLoading(false); return; }
         setToken(session.access_token);
 
-        // Check feature flag
+        // Check nutritionist + feature flag
         const { data: profile } = await supabase
           .from('profiles')
-          .select('ai_coach_enabled')
+          .select('ai_coach_enabled, nutritionist_id')
           .eq('user_id', session.user.id)
           .single();
 
+        if (profile?.nutritionist_id) { setHasNutritionist(true); setLoading(false); return; }
         if (!profile?.ai_coach_enabled) { setLoading(false); return; }
         setEnabled(true);
 
@@ -316,7 +347,10 @@ export default function CoachScreen() {
     );
   }
 
-  // ── Upsell ────────────────────────────────────────────────────────────
+  // ── Blocked (has nutritionist) ────────────────────────────────────────
+  if (hasNutritionist) return <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }}><BlockedScreen /></SafeAreaView>;
+
+  // ── Upsell (no subscription) ──────────────────────────────────────────
   if (!enabled) return <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }}><UpsellScreen /></SafeAreaView>;
 
   // ── Chat ──────────────────────────────────────────────────────────────
