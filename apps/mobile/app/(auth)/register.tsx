@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
@@ -9,6 +10,8 @@ import { api } from '@/services/api';
 
 export default function RegisterScreen() {
   const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [inviteCode, setInviteCode] = useState('');
+  const [hasNutritionist, setHasNutritionist] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
 
   function update(field: keyof typeof form) {
@@ -24,6 +27,15 @@ export default function RegisterScreen() {
       Alert.alert('Erro', 'A palavra-passe deve ter pelo menos 8 caracteres.');
       return;
     }
+    if (hasNutritionist === null) {
+      Alert.alert('Erro', 'Indica se tens ou não nutricionista.');
+      return;
+    }
+    if (hasNutritionist && !inviteCode.trim()) {
+      Alert.alert('Erro', 'Introduz o código do teu nutricionista.');
+      return;
+    }
+
     setLoading(true);
 
     const { data, error } = await supabase.auth.signUp({
@@ -43,6 +55,17 @@ export default function RegisterScreen() {
       // Non-fatal if trigger handles it
     }
 
+    if (hasNutritionist && inviteCode.trim()) {
+      try {
+        await api.post('/api/clients/join', { code: inviteCode.trim().toUpperCase() });
+      } catch {
+        Alert.alert(
+          'Código inválido',
+          'A conta foi criada mas o código do nutricionista é inválido. Podes ligá-lo mais tarde no Perfil.',
+        );
+      }
+    }
+
     setLoading(false);
     router.replace('/(auth)/onboarding');
   }
@@ -59,7 +82,8 @@ export default function RegisterScreen() {
           <Text className="text-3xl font-bold text-gray-900 mb-2">Criar conta</Text>
           <Text className="text-gray-400 mb-8">Começa o teu acompanhamento</Text>
 
-          <View className="space-y-4">
+          {/* Basic fields */}
+          <View className="space-y-4 mb-6">
             {[
               { label: 'Nome', field: 'name' as const, placeholder: 'O teu nome', type: 'default' },
               { label: 'Email', field: 'email' as const, placeholder: 'o.teu@email.com', type: 'email-address' },
@@ -80,10 +104,60 @@ export default function RegisterScreen() {
             ))}
           </View>
 
+          {/* Nutritionist question */}
+          <View className="bg-gray-50 rounded-2xl p-4 mb-6">
+            <Text className="text-sm font-semibold text-gray-800 mb-1">
+              Tens um nutricionista?
+            </Text>
+            <Text className="text-xs text-gray-400 mb-3">
+              Se sim, pede-lhe o código de convite NutriDesk.
+            </Text>
+            <View className="flex-row gap-2 mb-3">
+              <TouchableOpacity
+                onPress={() => setHasNutritionist(true)}
+                className={`flex-1 py-2.5 rounded-xl border-2 items-center ${
+                  hasNutritionist === true
+                    ? 'border-brand-500 bg-brand-50'
+                    : 'border-gray-200 bg-white'
+                }`}
+              >
+                <Text className={`text-sm font-medium ${hasNutritionist === true ? 'text-brand-700' : 'text-gray-600'}`}>
+                  Sim
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => { setHasNutritionist(false); setInviteCode(''); }}
+                className={`flex-1 py-2.5 rounded-xl border-2 items-center ${
+                  hasNutritionist === false
+                    ? 'border-gray-800 bg-gray-800'
+                    : 'border-gray-200 bg-white'
+                }`}
+              >
+                <Text className={`text-sm font-medium ${hasNutritionist === false ? 'text-white' : 'text-gray-600'}`}>
+                  Não
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {hasNutritionist === true && (
+              <View>
+                <Text className="text-xs text-gray-500 mb-1.5">Código de convite</Text>
+                <TextInput
+                  value={inviteCode}
+                  onChangeText={setInviteCode}
+                  placeholder="Ex: AB3X7YQP"
+                  autoCapitalize="characters"
+                  maxLength={8}
+                  className="border border-gray-200 bg-white rounded-xl px-4 py-3 text-base font-mono tracking-widest text-center"
+                />
+              </View>
+            )}
+          </View>
+
           <TouchableOpacity
             onPress={signUp}
             disabled={loading}
-            className="bg-brand-600 rounded-xl py-4 mt-8 items-center"
+            className="bg-brand-600 rounded-xl py-4 items-center"
           >
             <Text className="text-white font-semibold text-base">
               {loading ? 'A criar conta...' : 'Criar conta'}

@@ -23,7 +23,6 @@ export default function OnboardingScreen() {
     height_cm: '',
     body_fat_pct: '',
     goal: '' as Goal | '',
-    invite_code: '',
   });
   const [loading, setLoading] = useState(false);
 
@@ -41,14 +40,6 @@ export default function OnboardingScreen() {
         body_fat_pct: form.body_fat_pct ? parseFloat(form.body_fat_pct) : undefined,
         goal: form.goal || undefined,
       });
-
-      if (form.invite_code.trim()) {
-        try {
-          await api.post('/api/clients/join', { code: form.invite_code.trim().toUpperCase() });
-        } catch {
-          Alert.alert('Aviso', 'Código de convite inválido, mas a conta foi criada. Podes adicionar depois nas definições.');
-        }
-      }
 
       router.replace('/(tabs)/');
     } catch (err) {
@@ -118,50 +109,18 @@ export default function OnboardingScreen() {
       </View>
 
       <TouchableOpacity
-        onPress={() => setStep(2)}
-        disabled={!form.goal}
+        onPress={finish}
+        disabled={!form.goal || loading}
         className={`rounded-xl py-4 mt-8 items-center ${form.goal ? 'bg-brand-600' : 'bg-gray-200'}`}
       >
         <Text className={`font-semibold text-base ${form.goal ? 'text-white' : 'text-gray-400'}`}>
-          Continuar
-        </Text>
-      </TouchableOpacity>
-    </View>,
-
-    // Step 2: Nutritionist invite
-    <View key={2} className="flex-1">
-      <Text className="text-2xl font-bold text-gray-900 mb-2">Tens um nutricionista?</Text>
-      <Text className="text-gray-400 mb-8">
-        Se o teu nutricionista usa o NutriDesk, introduz o código que te enviou.
-        Podes fazer isto mais tarde.
-      </Text>
-
-      <View>
-        <Text className="text-sm font-medium text-gray-700 mb-1.5">Código de convite (opcional)</Text>
-        <TextInput
-          value={form.invite_code}
-          onChangeText={update('invite_code')}
-          placeholder="ex: AB3X7YQP"
-          autoCapitalize="characters"
-          maxLength={8}
-          className="border border-gray-200 rounded-xl px-4 py-3.5 text-base font-mono tracking-widest text-center text-lg"
-        />
-      </View>
-
-      <TouchableOpacity
-        onPress={finish}
-        disabled={loading}
-        className="bg-brand-600 rounded-xl py-4 mt-8 items-center"
-      >
-        <Text className="text-white font-semibold text-base">
           {loading ? 'A guardar...' : 'Começar'}
         </Text>
       </TouchableOpacity>
-
-      <TouchableOpacity onPress={finish} className="mt-4 items-center py-2">
-        <Text className="text-gray-400 text-sm">Saltar por agora</Text>
-      </TouchableOpacity>
     </View>,
+
+    // Step 1 end: Goal → finish
+    // (nutritionist code is collected during registration)
   ];
 
   return (
