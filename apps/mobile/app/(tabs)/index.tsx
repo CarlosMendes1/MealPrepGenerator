@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { MessageSquare, Camera } from 'lucide-react-native';
+import { MessageSquare, Camera, UserCheck } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import { timeAgo } from '@/utils/time';
@@ -25,6 +25,7 @@ interface Meal {
 interface Profile {
   full_name: string;
   goal: string;
+  nutritionist_id: string | null;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -173,12 +174,29 @@ export default function HomeScreen() {
       >
         <View className="px-5 pt-6 pb-8">
           {/* Header */}
-          <View className="mb-8">
+          <View className="mb-6">
             <Text className="text-2xl font-bold text-gray-900">Olá, {firstName}</Text>
             <Text className="text-gray-400 text-sm mt-0.5">
               {new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
             </Text>
           </View>
+
+          {/* Nutritionist connection badge */}
+          {profile?.nutritionist_id ? (
+            <View className="flex-row items-center gap-2 bg-brand-50 border border-brand-100 rounded-xl px-4 py-3 mb-6">
+              <UserCheck size={16} color="#16a34a" />
+              <Text className="text-brand-700 text-sm font-medium">Acompanhado pelo teu nutricionista</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/profile')}
+              className="flex-row items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-6"
+            >
+              <UserCheck size={16} color="#d97706" />
+              <Text className="text-amber-700 text-sm font-medium flex-1">Ainda não tens nutricionista</Text>
+              <Text className="text-amber-500 text-xs">Ligar →</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Daily stats */}
           <View className="flex-row gap-3 mb-6">

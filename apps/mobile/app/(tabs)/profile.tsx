@@ -46,6 +46,7 @@ export default function ProfileScreen() {
     lifestyle_notes: '',
   });
   const [saving, setSaving] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
 
   useEffect(() => {
@@ -94,13 +95,19 @@ export default function ProfileScreen() {
   }
 
   async function joinNutritionist() {
-    if (!inviteCode.trim()) return;
+    if (!inviteCode.trim() || joining) return;
+    setJoining(true);
     try {
       await api.post('/api/clients/join', { code: inviteCode.trim().toUpperCase() });
-      Alert.alert('', 'Ligado ao nutricionista com sucesso!');
       setInviteCode('');
+      // Reload profile so the green confirmation card appears immediately
+      const updated = await api.get<Profile>('/api/profile');
+      setProfile(updated);
+      Alert.alert('Ligado!', 'O teu nutricionista já consegue ver as tuas refeições.');
     } catch {
       Alert.alert('Erro', 'Código inválido ou já utilizado.');
+    } finally {
+      setJoining(false);
     }
   }
 
@@ -228,9 +235,12 @@ export default function ProfileScreen() {
                 />
                 <TouchableOpacity
                   onPress={joinNutritionist}
-                  className="bg-brand-600 px-4 rounded-xl items-center justify-center"
+                  disabled={joining}
+                  className={`px-4 rounded-xl items-center justify-center ${joining ? 'bg-brand-300' : 'bg-brand-600'}`}
                 >
-                  <Text className="text-white text-sm font-medium">Ligar</Text>
+                  <Text className="text-white text-sm font-medium">
+                    {joining ? 'A ligar...' : 'Ligar'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
