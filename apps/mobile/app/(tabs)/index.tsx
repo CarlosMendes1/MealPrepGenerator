@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Camera, MessageSquare, Sparkles, UserCheck, ChevronRight } from 'lucide-react-native';
+import { Camera, MessageSquare, Sparkles, ChevronRight } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import { timeAgo } from '@/utils/time';
@@ -165,23 +165,12 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4f46e5" />}
       >
-        {/* ── Hero header ───────────────────────────────────────────────── */}
-        <View className="bg-brand-600 mx-4 mt-5 rounded-3xl px-5 pt-7 pb-6 overflow-hidden"
-          style={{ shadowColor: '#4f46e5', shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 }}>
-          <View className="absolute bg-white/10 rounded-full"
-            style={{ width: 180, height: 180, top: -50, right: -50 }} />
-
-          <Text className="text-white text-2xl font-bold tracking-tight">Olá, {firstName} 👋</Text>
-          <Text className="text-brand-200 text-sm mt-1">
+        {/* ── Header ────────────────────────────────────────────────────── */}
+        <View className="px-5 pt-6 pb-2">
+          <Text className="text-2xl font-bold text-slate-900">Olá, {firstName} 👋</Text>
+          <Text className="text-slate-400 text-sm mt-1 capitalize">
             {new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
           </Text>
-
-          <View className="flex-row items-center gap-2 mt-5 bg-white/15 rounded-xl px-3 py-2 self-start">
-            {isAIMode ? <Sparkles size={13} color="white" /> : <UserCheck size={13} color="white" />}
-            <Text className="text-white text-xs font-semibold">
-              {isAIMode ? 'NutriCoach AI' : 'Acompanhado por nutricionista'}
-            </Text>
-          </View>
         </View>
 
         <View className="px-4 pt-5 pb-10" style={{ gap: 16 }}>
