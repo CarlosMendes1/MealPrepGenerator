@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
-  View, Text, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Keyboard,
+  View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Animated, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LogOut, Save, Sparkles, UserCheck, ChevronRight, Link2Off, Calculator } from 'lucide-react-native';
+import { LogOut, Save, Sparkles, UserCheck, ChevronRight, Link2Off, Calculator, RefreshCw } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { api } from '@/services/api';
 import { router } from 'expo-router';
@@ -43,8 +43,105 @@ interface Profile {
   ai_coach_enabled: boolean;
 }
 
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+
+function usePulse() {
+  const anim = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1,   duration: 800, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+    return () => anim.stopAnimation();
+  }, [anim]);
+  return anim;
+}
+
+function SkeletonBlock({ w, h, radius = 8 }: { w: number | string; h: number; radius?: number }) {
+  const opacity = usePulse();
+  return (
+    <Animated.View style={{
+      width: w as any, height: h, borderRadius: radius,
+      backgroundColor: '#e2e8f0', opacity,
+    }} />
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: 40 }}>
+          {/* Header */}
+          <SkeletonBlock w={120} h={28} radius={6} />
+          <View style={{ height: 6 }} />
+          <SkeletonBlock w={200} h={16} radius={4} />
+          <View style={{ height: 24 }} />
+
+          {/* Mode card */}
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
+            borderWidth: 1, borderColor: '#f1f5f9' }}>
+            <SkeletonBlock w={140} h={12} radius={4} />
+            <View style={{ height: 12 }} />
+            <View style={{ backgroundColor: '#f8fafc', borderRadius: 12, padding: 16,
+              flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <SkeletonBlock w={40} h={40} radius={10} />
+              <View style={{ flex: 1, gap: 6 }}>
+                <SkeletonBlock w="60%" h={14} radius={4} />
+                <SkeletonBlock w="40%" h={12} radius={4} />
+              </View>
+            </View>
+          </View>
+
+          {/* Body metrics card */}
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 12,
+            borderWidth: 1, borderColor: '#f1f5f9' }}>
+            <SkeletonBlock w={100} h={12} radius={4} />
+            <View style={{ height: 16 }} />
+            {[140, 120, 120, 120, 120].map((w, i) => (
+              <View key={i} style={{ marginBottom: 16 }}>
+                <SkeletonBlock w={w} h={12} radius={4} />
+                <View style={{ height: 6 }} />
+                <SkeletonBlock w="100%" h={44} radius={10} />
+              </View>
+            ))}
+          </View>
+
+          {/* Goal card */}
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 12,
+            borderWidth: 1, borderColor: '#f1f5f9' }}>
+            <SkeletonBlock w={80} h={12} radius={4} />
+            <View style={{ height: 16 }} />
+            {[0, 1, 2, 3].map((i) => (
+              <View key={i} style={{ marginBottom: 8 }}>
+                <SkeletonBlock w="100%" h={44} radius={10} />
+              </View>
+            ))}
+          </View>
+
+          {/* Calorie card */}
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 12,
+            borderWidth: 1, borderColor: '#f1f5f9' }}>
+            <SkeletonBlock w={160} h={12} radius={4} />
+            <View style={{ height: 12 }} />
+            <SkeletonBlock w="100%" h={44} radius={10} />
+          </View>
+
+          {/* Save button */}
+          <SkeletonBlock w="100%" h={52} radius={12} />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
 export default function ProfileScreen() {
-  const [profile, setProfile]   = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving]     = useState(false);
   const [joining, setJoining]   = useState(false);
   const [leaving, setLeaving]   = useState(false);
@@ -56,8 +153,10 @@ export default function ProfileScreen() {
     allergies: '', intolerances: '', dietary_preferences: '', lifestyle_notes: '',
   });
 
-  useEffect(() => {
-    api.get<Profile>('/api/profile').then((p) => {
+  async function load() {
+    setLoadError(false);
+    try {
+      const p = await api.get<Profile>('/api/profile');
       setProfile(p);
       setForm({
         full_name:           p.full_name ?? '',
@@ -72,8 +171,12 @@ export default function ProfileScreen() {
         dietary_preferences: p.dietary_preferences ?? '',
         lifestyle_notes:     p.lifestyle_notes ?? '',
       });
-    });
-  }, []);
+    } catch {
+      setLoadError(true);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
 
   function update(field: keyof typeof form) {
     return (val: string) => setForm((f) => ({ ...f, [field]: val }));
@@ -150,15 +253,27 @@ export default function ProfileScreen() {
     router.replace('/(auth)/login');
   }
 
-  if (!profile) {
+  if (!profile && !loadError) return <ProfileSkeleton />;
+
+  if (loadError) {
     return (
-      <SafeAreaView className="flex-1 bg-slate-50 items-center justify-center">
-        <ActivityIndicator color="#4f46e5" />
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <Text style={{ fontSize: 15, color: '#64748b', textAlign: 'center', paddingHorizontal: 32 }}>
+          Não foi possível carregar o perfil.{'\n'}Verifica a tua ligação.
+        </Text>
+        <TouchableOpacity
+          onPress={load}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6,
+            backgroundColor: '#4f46e5', borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12 }}
+        >
+          <RefreshCw size={15} color="#fff" />
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Tentar novamente</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
-  const isAIMode = !profile.nutritionist_id;
+  const isAIMode = !profile!.nutritionist_id;
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
@@ -178,22 +293,21 @@ export default function ProfileScreen() {
 
             {isAIMode ? (
               <>
-                {/* AI Coach mode */}
                 <View className={`rounded-xl p-4 flex-row items-center gap-3 mb-3 ${
-                  profile.ai_coach_enabled ? 'bg-brand-50 border border-brand-100' : 'bg-slate-50 border border-slate-200'
+                  profile!.ai_coach_enabled ? 'bg-brand-50 border border-brand-100' : 'bg-slate-50 border border-slate-200'
                 }`}>
                   <View className={`w-10 h-10 rounded-xl items-center justify-center ${
-                    profile.ai_coach_enabled ? 'bg-brand-600' : 'bg-slate-300'
+                    profile!.ai_coach_enabled ? 'bg-brand-600' : 'bg-slate-300'
                   }`}>
                     <Sparkles size={18} color="white" />
                   </View>
                   <View className="flex-1">
                     <Text className="font-bold text-slate-900 text-sm">NutriCoach AI</Text>
-                    <Text className={`text-xs mt-0.5 ${profile.ai_coach_enabled ? 'text-brand-600' : 'text-slate-400'}`}>
-                      {profile.ai_coach_enabled ? 'Subscrição ativa' : 'Sem subscrição · 7 dias grátis'}
+                    <Text className={`text-xs mt-0.5 ${profile!.ai_coach_enabled ? 'text-brand-600' : 'text-slate-400'}`}>
+                      {profile!.ai_coach_enabled ? 'Subscrição ativa' : 'Sem subscrição · 7 dias grátis'}
                     </Text>
                   </View>
-                  {!profile.ai_coach_enabled && (
+                  {!profile!.ai_coach_enabled && (
                     <TouchableOpacity
                       onPress={() => router.push('/(tabs)/coach')}
                       className="bg-brand-600 px-3 py-2 rounded-xl flex-row items-center gap-1"
@@ -204,7 +318,6 @@ export default function ProfileScreen() {
                   )}
                 </View>
 
-                {/* Link to nutritionist */}
                 <Text className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                   Emparelhar com nutricionista
                 </Text>
@@ -235,7 +348,6 @@ export default function ProfileScreen() {
               </>
             ) : (
               <>
-                {/* Nutritionist mode */}
                 <View className="bg-nutrition-50 border border-nutrition-100 rounded-xl p-4 flex-row items-center gap-3 mb-3">
                   <View className="bg-nutrition-600 w-10 h-10 rounded-xl items-center justify-center">
                     <UserCheck size={18} color="white" />
@@ -356,11 +468,11 @@ export default function ProfileScreen() {
               {form.goal && form.weight_kg && form.height_cm && form.age ? (
                 <TouchableOpacity
                   onPress={() => {
-                    const suggestion = suggestCalories(
+                    const s = suggestCalories(
                       parseFloat(form.weight_kg), parseFloat(form.height_cm),
                       parseInt(form.age), form.goal as Goal,
                     );
-                    setForm((f) => ({ ...f, calorie_target: String(suggestion) }));
+                    setForm((f) => ({ ...f, calorie_target: String(s) }));
                   }}
                   className="bg-brand-50 border border-brand-200 rounded-xl px-3 py-3 items-center justify-center"
                 >
@@ -370,7 +482,8 @@ export default function ProfileScreen() {
             </View>
             {form.goal && form.weight_kg && form.height_cm && form.age ? (
               <Text className="text-xs text-slate-400 mt-2">
-                Sugestão para o teu objetivo: <Text className="font-semibold text-slate-600">
+                Sugestão para o teu objetivo:{' '}
+                <Text className="font-semibold text-slate-600">
                   {suggestCalories(parseFloat(form.weight_kg), parseFloat(form.height_cm), parseInt(form.age), form.goal as Goal)} kcal
                 </Text>
               </Text>
@@ -386,10 +499,10 @@ export default function ProfileScreen() {
             <Text className="text-xs text-slate-400 mb-4">Usadas pelo coach para personalizar o feedback.</Text>
             <View className="space-y-4">
               {[
-                { label: 'Alergias',              field: 'allergies' as const,           placeholder: 'ex: amendoins, marisco' },
-                { label: 'Intolerâncias',         field: 'intolerances' as const,        placeholder: 'ex: lactose, glúten' },
-                { label: 'Preferências',          field: 'dietary_preferences' as const, placeholder: 'ex: vegetariano, sem açúcar' },
-                { label: 'Horários / estilo',     field: 'lifestyle_notes' as const,     placeholder: 'ex: trabalho por turnos, treino ao fim de tarde' },
+                { label: 'Alergias',          field: 'allergies' as const,           placeholder: 'ex: amendoins, marisco' },
+                { label: 'Intolerâncias',      field: 'intolerances' as const,        placeholder: 'ex: lactose, glúten' },
+                { label: 'Preferências',       field: 'dietary_preferences' as const, placeholder: 'ex: vegetariano, sem açúcar' },
+                { label: 'Horários / estilo',  field: 'lifestyle_notes' as const,     placeholder: 'ex: trabalho por turnos, treino ao fim de tarde' },
               ].map((input) => (
                 <View key={input.field}>
                   <Text className="text-xs text-slate-500 font-medium mb-1.5">{input.label}</Text>
