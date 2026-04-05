@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, RefreshControl, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageSquare, Clock } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import { timeAgo } from '@/utils/time';
+import { MealsSkeleton } from '@/components/Skeleton';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -240,9 +241,8 @@ export default function MealsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50 items-center justify-center">
-        <ActivityIndicator size="large" color="#16a34a" />
-        <Text className="text-gray-400 text-sm mt-3">A carregar refeições...</Text>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+        <MealsSkeleton />
       </SafeAreaView>
     );
   }

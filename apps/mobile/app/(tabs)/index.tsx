@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Camera, MessageSquare, Sparkles, UserCheck, ChevronRight } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import { timeAgo } from '@/utils/time';
+import { HomeSkeleton } from '@/components/Skeleton';
 
 interface Meal {
   id: string;
@@ -147,8 +148,8 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-slate-50 items-center justify-center">
-        <ActivityIndicator size="large" color="#4f46e5" />
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+        <HomeSkeleton />
       </SafeAreaView>
     );
   }

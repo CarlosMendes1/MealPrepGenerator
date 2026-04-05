@@ -56,7 +56,7 @@ export default function TabsLayout() {
 
   if (session === undefined) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' }}>
         <ActivityIndicator size="large" color="#4f46e5" />
       </View>
     );
