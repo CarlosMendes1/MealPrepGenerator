@@ -2,11 +2,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Camera, MessageSquare, Sparkles, ChevronRight } from 'lucide-react-native';
+import { Camera, MessageSquare, Sparkles, ChevronRight, Lock } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import { timeAgo } from '@/utils/time';
 import { HomeSkeleton } from '@/components/Skeleton';
+import { PaywallModal } from '@/components/PaywallModal';
+
+const FREE_MEAL_LIMIT = 3;
 
 interface Meal {
   id: string;
@@ -104,6 +107,7 @@ export default function HomeScreen() {
   const [todayMeals, setTodayMeals] = useState<Meal[]>([]);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
 
   async function load() {
     try {
@@ -152,6 +156,7 @@ export default function HomeScreen() {
   const hasCoach  = profile?.ai_coach_enabled;
 
   if (loading) {
+
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
         <HomeSkeleton />
@@ -159,8 +164,18 @@ export default function HomeScreen() {
     );
   }
 
+  const isFreeUser = isAIMode && !hasCoach;
+  const freeMealsUsed = Math.min(todayMeals.length, FREE_MEAL_LIMIT);
+  const freeLimitReached = isFreeUser && todayMeals.length >= FREE_MEAL_LIMIT;
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        mealsToday={todayMeals.length}
+        limit={FREE_MEAL_LIMIT}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4f46e5" />}
@@ -209,6 +224,41 @@ export default function HomeScreen() {
               </View>
             ))}
           </View>
+
+          {/* ── Free meal counter ─────────────────────────────────────────── */}
+          {isFreeUser && (
+            <TouchableOpacity
+              onPress={() => setPaywallVisible(true)}
+              className={`rounded-2xl px-4 py-3.5 flex-row items-center gap-3 border ${
+                freeLimitReached
+                  ? 'bg-red-50 border-red-200'
+                  : 'bg-white border-slate-100'
+              }`}
+              style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 }}
+            >
+              <View className={`w-8 h-8 rounded-xl items-center justify-center ${
+                freeLimitReached ? 'bg-red-100' : 'bg-slate-100'
+              }`}>
+                {freeLimitReached
+                  ? <Lock size={15} color="#ef4444" />
+                  : <Camera size={15} color="#64748b" />
+                }
+              </View>
+              <View className="flex-1">
+                <Text className={`text-sm font-semibold ${freeLimitReached ? 'text-red-600' : 'text-slate-700'}`}>
+                  {freeLimitReached ? 'Limite diário atingido' : `${freeMealsUsed} de ${FREE_MEAL_LIMIT} refeições gratuitas`}
+                </Text>
+                {/* Progress bar */}
+                <View className="mt-1.5 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <View
+                    className={`h-full rounded-full ${freeLimitReached ? 'bg-red-400' : 'bg-brand-500'}`}
+                    style={{ width: `${Math.min((freeMealsUsed / FREE_MEAL_LIMIT) * 100, 100)}%` }}
+                  />
+                </View>
+              </View>
+              <ChevronRight size={14} color={freeLimitReached ? '#ef4444' : '#94a3b8'} />
+            </TouchableOpacity>
+          )}
 
           {/* ── AI Coach CTA ──────────────────────────────────────────────── */}
           {isAIMode && !hasCoach && (

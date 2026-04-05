@@ -1,15 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, Image, ScrollView,
   ActivityIndicator, TextInput, Modal, FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera as CameraIcon, Image as ImageIcon, Check, X, ChevronDown } from 'lucide-react-native';
+import { Camera as CameraIcon, Image as ImageIcon, Check, X, ChevronDown, Lock } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { supabase } from '@/services/supabase';
+import { api } from '@/services/api';
 import Toast from '@/components/Toast';
 import { useToast } from '@/hooks/useToast';
+import { PaywallModal } from '@/components/PaywallModal';
+
+const FREE_MEAL_LIMIT = 3;
 
 type MealType =
   | 'breakfast'
@@ -37,7 +41,35 @@ export default function CameraScreen() {
   const [notes, setNotes] = useState('');
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const [isFreeUser, setIsFreeUser] = useState(false);
+  const [mealsToday, setMealsToday] = useState(0);
   const { toast, show: showToast, hide: hideToast } = useToast();
+
+  useEffect(() => {
+    async function checkLimit() {
+      try {
+        const [profile, meals] = await Promise.all([
+          api.get<{ ai_coach_enabled: boolean; nutritionist_id: string | null }>('/api/profile'),
+          api.get<Array<{ eaten_at: string }>>('/api/meals?limit=50'),
+        ]);
+        const isAIMode = !profile.nutritionist_id;
+        const isPremium = profile.ai_coach_enabled;
+        if (isAIMode && !isPremium) {
+          setIsFreeUser(true);
+          const today = new Date().toDateString();
+          const count = (meals as Array<{ eaten_at: string }>).filter(
+            (m) => new Date(m.eaten_at).toDateString() === today
+          ).length;
+          setMealsToday(count);
+          if (count >= FREE_MEAL_LIMIT) {
+            setPaywallVisible(true);
+          }
+        }
+      } catch { /* silent */ }
+    }
+    checkLimit();
+  }, []);
 
   async function takePhoto() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -74,6 +106,10 @@ export default function CameraScreen() {
     if (!photo) return;
     if (!mealType) {
       showToast('Por favor seleciona o tipo de refeição antes de enviar.', 'info');
+      return;
+    }
+    if (isFreeUser && mealsToday >= FREE_MEAL_LIMIT) {
+      setPaywallVisible(true);
       return;
     }
     setUploading(true);
@@ -123,9 +159,32 @@ export default function CameraScreen() {
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <Toast message={toast.message} type={toast.type} visible={toast.visible} onHide={hideToast} />
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        mealsToday={mealsToday}
+        limit={FREE_MEAL_LIMIT}
+      />
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         <View className="px-5 pt-6 pb-8 flex-1">
-          <Text className="text-2xl font-bold text-gray-900 mb-1">Registar refeição</Text>
+          <View className="flex-row items-center justify-between mb-1">
+            <Text className="text-2xl font-bold text-gray-900">Registar refeição</Text>
+            {isFreeUser && (
+              <TouchableOpacity
+                onPress={() => setPaywallVisible(true)}
+                className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full ${
+                  mealsToday >= FREE_MEAL_LIMIT ? 'bg-red-100' : 'bg-slate-100'
+                }`}
+              >
+                {mealsToday >= FREE_MEAL_LIMIT && <Lock size={11} color="#ef4444" />}
+                <Text className={`text-xs font-bold ${
+                  mealsToday >= FREE_MEAL_LIMIT ? 'text-red-500' : 'text-slate-500'
+                }`}>
+                  {mealsToday}/{FREE_MEAL_LIMIT} hoje
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <Text className="text-gray-400 text-sm mb-6">Fotografa o que acabaste de comer</Text>
 
           {/* Photo area */}

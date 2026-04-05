@@ -5,6 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -97,57 +98,94 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
 // ── Upsell screen ─────────────────────────────────────────────────────────────
 
-function UpsellScreen() {
-  const features = [
-    'Respostas em tempo real sobre nutrição',
-    'Análise automática das tuas refeições',
-    'Sugestões personalizadas ao teu objetivo',
-    'Dicas de lifestyle e hábitos saudáveis',
-    'Histórico de conversas guardado',
-  ];
+const UPSELL_FEATURES: { emoji: string; title: string; subtitle: string; highlight?: boolean }[] = [
+  { emoji: '∞', title: 'Refeições ilimitadas', subtitle: 'Regista quantas refeições quiseres por dia', highlight: true },
+  { emoji: '🤖', title: 'Coach AI 24/7', subtitle: 'Respostas em tempo real sobre nutrição e bem-estar' },
+  { emoji: '📊', title: 'Análise inteligente', subtitle: 'Macros, calorias e score de cada refeição' },
+  { emoji: '🎯', title: 'Plano personalizado', subtitle: 'Sugestões adaptadas ao teu objetivo e perfil' },
+  { emoji: '📈', title: 'Relatórios semanais', subtitle: 'Acompanha a tua evolução ao longo do tempo' },
+];
 
+function UpsellScreen() {
   return (
-    <View style={styles.upsellContainer}>
-      <View style={styles.upsellCard}>
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={styles.upsellScroll}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Hero */}
+      <View style={styles.upsellHero}>
         <View style={styles.upsellIconCircle}>
-          <Sparkles size={32} color="#fff" />
+          <Sparkles size={36} color="#fff" />
         </View>
-        <Text style={styles.upsellTitle}>NutriCoach AI</Text>
-        <Text style={styles.upsellSubtitle}>
-          O teu assistente de nutrição inteligente, disponível 24/7 para te ajudar a atingir os teus objetivos.
+        <Text style={[styles.upsellTitle, { color: '#fff' }]}>NutriCoach AI</Text>
+        <Text style={[styles.upsellSubtitle, { color: 'rgba(255,255,255,0.75)' }]}>
+          O teu assistente de nutrição inteligente.{'\n'}Registos ilimitados, feedback instantâneo.
         </Text>
 
-        <View style={styles.upsellFeatures}>
-          {features.map((f) => (
-            <View key={f} style={styles.upsellFeatureRow}>
-              <View style={styles.upsellCheck} />
-              <Text style={styles.upsellFeatureText}>{f}</Text>
-            </View>
-          ))}
+        {/* Free plan comparison */}
+        <View style={styles.planCompare}>
+          <View style={styles.planBadgeFree}>
+            <Text style={styles.planBadgeFreeText}>Plano Gratuito</Text>
+            <Text style={styles.planBadgeFreeSub}>3 refeições/dia · sem Coach AI</Text>
+          </View>
+          <View style={styles.planArrow}>
+            <ArrowRight size={16} color="#4f46e5" />
+          </View>
+          <View style={styles.planBadgePro}>
+            <Text style={styles.planBadgeProText}>Premium</Text>
+            <Text style={styles.planBadgeProSub}>Tudo ilimitado</Text>
+          </View>
         </View>
+      </View>
 
-        <View style={styles.upsellPriceCard}>
-          <Lock size={14} color="#6366f1" />
-          <Text style={styles.upsellPriceText}>A partir de €9/mês</Text>
+      {/* Features list */}
+      <View style={styles.featuresList}>
+        {UPSELL_FEATURES.map((f) => (
+          <View key={f.title} style={[styles.featureCard, f.highlight && styles.featureCardHighlight]}>
+            <View style={[styles.featureEmoji, f.highlight && styles.featureEmojiHighlight]}>
+              <Text style={styles.featureEmojiText}>{f.emoji}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.featureTitle, f.highlight && styles.featureTitleHighlight]}>
+                {f.title}
+              </Text>
+              <Text style={styles.featureSubtitle}>{f.subtitle}</Text>
+            </View>
+            {f.highlight && (
+              <View style={styles.featureHighlightBadge}>
+                <Text style={styles.featureHighlightBadgeText}>PREMIUM</Text>
+              </View>
+            )}
+          </View>
+        ))}
+      </View>
+
+      {/* Price + CTA */}
+      <View style={styles.ctaSection}>
+        <View style={styles.priceRow}>
+          <Text style={styles.priceMain}>7 dias grátis</Text>
+          <Text style={styles.priceSub}> · depois €9/mês · cancela quando quiseres</Text>
         </View>
 
         <TouchableOpacity
           style={styles.upsellCta}
-          onPress={() => router.push('/(auth)/login')}
+          onPress={() => router.push('/(tabs)/profile')}
           activeOpacity={0.85}
         >
-          <Zap size={16} color="#fff" />
-          <Text style={styles.upsellCtaText}>Ativar NutriCoach</Text>
-          <ArrowRight size={16} color="#fff" />
+          <Zap size={18} color="#fff" />
+          <Text style={styles.upsellCtaText}>Ativar NutriCoach Premium</Text>
+          <ArrowRight size={18} color="#fff" />
         </TouchableOpacity>
 
         <Text style={styles.upsellNote}>
-          Vai a Perfil → Definições para ativar. Trial de 7 dias gratuito.
+          Ativa em Perfil → Modo de acompanhamento. Sem compromisso.
         </Text>
       </View>
-    </View>
+    </ScrollView>
   );
 }
+
 
 // ── Blocked screen (has human nutritionist) ───────────────────────────────────
 
@@ -351,7 +389,7 @@ export default function CoachScreen() {
   if (hasNutritionist) return <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }}><BlockedScreen /></SafeAreaView>;
 
   // ── Upsell (no subscription) ──────────────────────────────────────────
-  if (!enabled) return <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }}><UpsellScreen /></SafeAreaView>;
+  if (!enabled) return <SafeAreaView style={{ flex: 1, backgroundColor: '#4f46e5' }} edges={['top']}><UpsellScreen /></SafeAreaView>;
 
   // ── Chat ──────────────────────────────────────────────────────────────
   return (
@@ -529,32 +567,90 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   upsellIconCircle: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: '#6366f1', alignItems: 'center', justifyContent: 'center',
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: '#4f46e5', alignItems: 'center', justifyContent: 'center',
     marginBottom: 16,
+    shadowColor: '#4f46e5', shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
   },
-  upsellTitle:    { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 8 },
+  upsellTitle: { fontSize: 26, fontWeight: '800', color: '#0f172a', marginBottom: 8, textAlign: 'center' },
   upsellSubtitle: {
-    fontSize: 14, color: '#6b7280', textAlign: 'center', lineHeight: 22, marginBottom: 20,
+    fontSize: 15, color: '#64748b', textAlign: 'center', lineHeight: 23, marginBottom: 20,
   },
-  upsellFeatures: { width: '100%', gap: 10, marginBottom: 20 },
-  upsellFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  upsellCheck: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#16a34a' },
-  upsellFeatureText: { fontSize: 14, color: '#374151' },
 
+  // Plan comparison
+  planCompare: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: 12, marginBottom: 4,
+    width: '100%',
+  },
+  planBadgeFree: { flex: 1, alignItems: 'center' },
+  planBadgeFreeText: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.7)' },
+  planBadgeFreeSub:  { fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 2, textAlign: 'center' },
+  planArrow: { paddingHorizontal: 4 },
+  planBadgePro: {
+    flex: 1, alignItems: 'center', backgroundColor: '#fff',
+    borderRadius: 10, paddingVertical: 6,
+  },
+  planBadgeProText: { fontSize: 12, fontWeight: '800', color: '#4f46e5' },
+  planBadgeProSub:  { fontSize: 10, color: '#6366f1', marginTop: 2 },
+
+  // Upsell scroll layout
+  upsellScroll: { paddingBottom: 40 },
+  upsellHero: {
+    backgroundColor: '#4f46e5', paddingTop: 40, paddingBottom: 32, paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+
+  // Features list
+  featuresList: { padding: 16, gap: 10 },
+  featureCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: '#fff', borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: '#f1f5f9',
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
+  featureCardHighlight: {
+    borderColor: '#c7d2fe', backgroundColor: '#eef2ff',
+    shadowColor: '#4f46e5', shadowOpacity: 0.1, shadowRadius: 8, elevation: 3,
+  },
+  featureEmoji: {
+    width: 44, height: 44, borderRadius: 14,
+    backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center',
+  },
+  featureEmojiHighlight: { backgroundColor: '#ddd6fe' },
+  featureEmojiText: { fontSize: 22 },
+  featureTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 2 },
+  featureTitleHighlight: { color: '#4338ca' },
+  featureSubtitle: { fontSize: 12, color: '#64748b', lineHeight: 17 },
+  featureHighlightBadge: {
+    backgroundColor: '#4f46e5', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+  },
+  featureHighlightBadgeText: { fontSize: 9, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+
+  // CTA section
+  ctaSection: { paddingHorizontal: 20, paddingTop: 8 },
+  priceRow: {
+    flexDirection: 'row', alignItems: 'baseline', marginBottom: 14, justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  priceMain: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
+  priceSub:  { fontSize: 13, color: '#94a3b8' },
+
+  upsellCta: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#4f46e5', borderRadius: 16,
+    paddingHorizontal: 20, paddingVertical: 16, width: '100%', justifyContent: 'center',
+    marginBottom: 12,
+    shadowColor: '#4f46e5', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+  },
+  upsellCtaText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  upsellNote: { fontSize: 12, color: '#9ca3af', textAlign: 'center' },
+
+  // kept for BlockedScreen
   upsellPriceCard: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: '#eef2ff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8,
     marginBottom: 16,
   },
   upsellPriceText: { fontSize: 14, fontWeight: '600', color: '#6366f1' },
-
-  upsellCta: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#6366f1', borderRadius: 14,
-    paddingHorizontal: 20, paddingVertical: 14, width: '100%', justifyContent: 'center',
-    marginBottom: 12,
-  },
-  upsellCtaText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  upsellNote:    { fontSize: 12, color: '#9ca3af', textAlign: 'center' },
 });
