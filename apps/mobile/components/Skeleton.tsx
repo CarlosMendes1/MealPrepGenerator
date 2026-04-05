@@ -36,9 +36,8 @@ export function SkeletonPulse({ width, height = 16, radius = 10, style }: Props)
 export function HomeSkeleton() {
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <SkeletonPulse height={28} width={180} radius={8} style={styles.mb3} />
-      <SkeletonPulse height={14} width={140} radius={6} style={styles.mb4} />
+      {/* Hero card */}
+      <SkeletonPulse height={88} radius={24} style={styles.mb4} />
 
       {/* Row 1: refeições + kcal */}
       <View style={styles.row}>

@@ -165,10 +165,11 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4f46e5" />}
       >
-        {/* ── Header ────────────────────────────────────────────────────── */}
-        <View className="px-5 pt-6 pb-2">
-          <Text className="text-2xl font-bold text-slate-900">Olá, {firstName} 👋</Text>
-          <Text className="text-slate-400 text-sm mt-1 capitalize">
+        {/* ── Hero header ───────────────────────────────────────────────── */}
+        <View className="bg-brand-600 mx-4 mt-5 rounded-3xl px-5 pt-6 pb-6"
+          style={{ shadowColor: '#4f46e5', shadowOpacity: 0.25, shadowRadius: 12, elevation: 6 }}>
+          <Text className="text-white text-2xl font-bold tracking-tight">Olá, {firstName} 👋</Text>
+          <Text className="text-white/80 text-sm font-medium mt-1.5 capitalize">
             {new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
           </Text>
         </View>
