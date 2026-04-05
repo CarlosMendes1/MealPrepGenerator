@@ -8,8 +8,6 @@ import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import type { Session } from '@supabase/supabase-js';
 
-// ── Raised camera button ──────────────────────────────────────────────────────
-
 function CameraTabButton({ onPress, accessibilityState }: any) {
   return (
     <TouchableOpacity
@@ -28,14 +26,23 @@ function CameraTabButton({ onPress, accessibilityState }: any) {
 // ── Layout ────────────────────────────────────────────────────────────────────
 
 export default function TabsLayout() {
-  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [session, setSession]           = useState<Session | null | undefined>(undefined);
   const [newFeedbackCount, setNewFeedbackCount] = useState(0);
+  const [needsOnboarding, setNeedsOnboarding]   = useState<boolean | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
+
+  // Check if user needs onboarding (no goal set yet)
+  useEffect(() => {
+    if (!session) { setNeedsOnboarding(false); return; }
+    api.get<{ goal: string | null }>('/api/profile')
+      .then((p) => setNeedsOnboarding(!p.goal))
+      .catch(() => setNeedsOnboarding(false));
+  }, [session]);
 
   async function loadFeedbackCount() {
     try {
@@ -54,7 +61,7 @@ export default function TabsLayout() {
     return () => { supabase.removeChannel(channel); };
   }, [session]);
 
-  if (session === undefined) {
+  if (session === undefined || needsOnboarding === null) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' }}>
         <ActivityIndicator size="large" color="#4f46e5" />
@@ -63,6 +70,7 @@ export default function TabsLayout() {
   }
 
   if (!session) return <Redirect href="/(auth)/login" />;
+  if (needsOnboarding) return <Redirect href="/(auth)/onboarding" />;
 
   return (
     <Tabs

@@ -9,6 +9,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nutridesk.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Necessário para fotografar as suas refeições.",
         "NSPhotoLibraryUsageDescription": "Necessário para selecionar fotos das suas refeições."
@@ -28,6 +29,7 @@
     "plugins": [
       "expo-router",
       "expo-camera",
+      "expo-apple-authentication",
       [
         "expo-image-picker",
         {
