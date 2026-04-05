@@ -28,14 +28,25 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 30_000);
 
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((error as any).error ?? 'Request failed');
+  try {
+    const res = await fetch(`${API_URL}${path}`, { ...options, headers, signal: controller.signal });
+
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => ({}));
+      const message = (errorBody as { error?: string }).error ?? res.statusText ?? 'Request failed';
+      throw new Error(message);
+    }
+
+    return res.json();
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw new Error('Pedido expirou. Verifica a tua ligação.');
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return res.json();
 }
 
 export const api = {

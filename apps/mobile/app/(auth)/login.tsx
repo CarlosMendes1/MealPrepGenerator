@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ScrollView, StyleSheet,
+  KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Keyboard,
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { Sparkles } from 'lucide-react-native';
@@ -58,6 +58,7 @@ export default function LoginScreen() {
   // ── Email/password ──────────────────────────────────────────────────────
   async function signIn() {
     if (!email || !password) return;
+    Keyboard.dismiss();
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
@@ -83,18 +84,17 @@ export default function LoginScreen() {
 
       if (result.type === 'success') {
         const { access_token, refresh_token } = extractTokensFromUrl(result.url);
-        if (access_token) {
-          await supabase.auth.setSession({
-            access_token,
-            refresh_token: refresh_token ?? '',
-          });
+        if (access_token && refresh_token) {
+          await supabase.auth.setSession({ access_token, refresh_token });
         }
-        // Fallback: let the auth state change listener pick up the session
+        // Let auth state change listener redirect via _layout
         const { data: { session } } = await supabase.auth.getSession();
         if (session) router.replace('/(tabs)/');
+      } else if (result.type === 'cancel' || result.type === 'dismiss') {
+        // User cancelled — no error needed
       }
     } catch {
-      showToast('Não foi possível iniciar sessão com Google. Verifica a configuração.', 'error');
+      showToast('Não foi possível iniciar sessão com Google. Verifica a configuração nas Definições.', 'error');
     } finally {
       setLoading(false);
     }
@@ -120,8 +120,9 @@ export default function LoginScreen() {
 
       if (error) throw error;
       router.replace('/(tabs)/');
-    } catch (e: any) {
-      if (e.code !== 'ERR_REQUEST_CANCELED') {
+    } catch (e: unknown) {
+      const code = (e as { code?: string }).code;
+      if (code !== 'ERR_REQUEST_CANCELED') {
         showToast('Não foi possível iniciar sessão com Apple.', 'error');
       }
     } finally {

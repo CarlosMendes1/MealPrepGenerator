@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ScrollView, Alert,
+  KeyboardAvoidingView, Platform, ScrollView, Alert, Keyboard,
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { Sparkles } from 'lucide-react-native';
@@ -36,6 +36,7 @@ export default function RegisterScreen() {
       return;
     }
 
+    Keyboard.dismiss();
     setLoading(true);
 
     const { data, error } = await supabase.auth.signUp({
@@ -43,15 +44,26 @@ export default function RegisterScreen() {
       password: form.password,
     });
 
-    if (error || !data.session) {
+    if (error) {
       setLoading(false);
-      Alert.alert('Erro', error?.message ?? 'Erro ao criar conta.');
+      Alert.alert('Erro', error.message ?? 'Erro ao criar conta.');
+      return;
+    }
+
+    // Supabase may require email confirmation — session may be null
+    if (!data.session) {
+      setLoading(false);
+      Alert.alert(
+        'Confirma o teu email',
+        'Enviámos um link de confirmação para ' + form.email + '. Confirma antes de entrar.',
+        [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
+      );
       return;
     }
 
     try {
       await api.post('/api/profile', { full_name: form.name, role: 'client' });
-    } catch { /* trigger handles it */ }
+    } catch { /* profile may be created by DB trigger */ }
 
     if (hasNutritionist && inviteCode.trim()) {
       try {
@@ -59,7 +71,7 @@ export default function RegisterScreen() {
       } catch {
         Alert.alert(
           'Código inválido',
-          'Conta criada, mas o código do nutricionista é inválido. Liga-o mais tarde no Perfil.',
+          'Conta criada com sucesso, mas o código do nutricionista é inválido. Liga-o mais tarde no Perfil.',
         );
       }
     }

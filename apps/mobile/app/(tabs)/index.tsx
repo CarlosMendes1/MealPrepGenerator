@@ -1,13 +1,15 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { router } from 'expo-router';
-import { Camera, Sparkles, ChevronRight, Lock, MessageSquare } from 'lucide-react-native';
+import { Camera, Sparkles, ChevronRight, Lock } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import { timeAgo } from '@/utils/time';
 import { PaywallModal } from '@/components/PaywallModal';
+import Toast from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -192,22 +194,30 @@ export default function HomeScreen() {
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [paywallVisible, setPaywallVisible] = useState(false);
+  const { toast, show: showToast, hide: hideToast } = useToast();
 
   async function load() {
-    try {
-      const [profileData, mealsData] = await Promise.all([
-        api.get<Profile>('/api/profile'),
-        api.get<Meal[]>('/api/meals?limit=100'),
-      ]);
-      setProfile(profileData);
+    const [profileResult, mealsResult] = await Promise.allSettled([
+      api.get<Profile>('/api/profile'),
+      api.get<Meal[]>('/api/meals?limit=100'),
+    ]);
+
+    if (profileResult.status === 'fulfilled') {
+      setProfile(profileResult.value);
+    } else {
+      showToast('Erro ao carregar perfil. Tenta novamente.', 'error');
+    }
+
+    if (mealsResult.status === 'fulfilled') {
+      const mealsData = mealsResult.value;
       const today = new Date().toDateString();
       setTodayMeals(mealsData.filter((m) => new Date(m.eaten_at).toDateString() === today));
       setAllMeals(mealsData);
-    } catch (err) {
-      console.error('Failed to load home data:', err);
-    } finally {
-      setLoading(false);
+    } else {
+      showToast('Erro ao carregar refeições. Tenta novamente.', 'error');
     }
+
+    setLoading(false);
   }
 
   useEffect(() => { load(); }, []);
@@ -231,25 +241,30 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, []);
 
-  // ── Derived values ──────────────────────────────────────────────────────────
+  // ── Derived values (memoised) ───────────────────────────────────────────────
 
-  const firstName    = profile?.full_name?.split(' ')[0] ?? 'Olá';
-  const isAIMode     = !profile?.nutritionist_id;
-  const hasCoach     = profile?.ai_coach_enabled ?? false;
-  const isFreeUser   = isAIMode && !hasCoach;
-  const goalKey      = (profile?.goal as GoalKey | null) ?? 'maintain';
-  const targets      = DAILY_TARGETS[goalKey] ?? DAILY_TARGETS.maintain;
+  const firstName = profile?.full_name?.split(' ')[0] ?? 'Olá';
+  const isAIMode  = !profile?.nutritionist_id;
+  const hasCoach  = profile?.ai_coach_enabled ?? false;
+  const isFreeUser = isAIMode && !hasCoach;
+  const goalKey   = (profile?.goal as GoalKey | null) ?? 'maintain';
+  const targets   = DAILY_TARGETS[goalKey] ?? DAILY_TARGETS.maintain;
 
-  const totalCalories = todayMeals.reduce((a, m) => a + (m.ai_analysis?.macros.calories  ?? 0), 0);
-  const totalProtein  = todayMeals.reduce((a, m) => a + (m.ai_analysis?.macros.protein_g ?? 0), 0);
-  const totalCarbs    = todayMeals.reduce((a, m) => a + (m.ai_analysis?.macros.carbs_g   ?? 0), 0);
-  const totalFat      = todayMeals.reduce((a, m) => a + (m.ai_analysis?.macros.fat_g     ?? 0), 0);
+  const { totalCalories, totalProtein, totalCarbs, totalFat } = useMemo(() => ({
+    totalCalories: todayMeals.reduce((a, m) => a + (m.ai_analysis?.macros.calories  ?? 0), 0),
+    totalProtein:  todayMeals.reduce((a, m) => a + (m.ai_analysis?.macros.protein_g ?? 0), 0),
+    totalCarbs:    todayMeals.reduce((a, m) => a + (m.ai_analysis?.macros.carbs_g   ?? 0), 0),
+    totalFat:      todayMeals.reduce((a, m) => a + (m.ai_analysis?.macros.fat_g     ?? 0), 0),
+  }), [todayMeals]);
 
   // Coach insight: latest meal with an AI draft
-  const latestInsight = todayMeals.find((m) => m.ai_feedback_draft)?.ai_feedback_draft ?? null;
+  const latestInsight = useMemo(
+    () => todayMeals.find((m) => m.ai_feedback_draft)?.ai_feedback_draft ?? null,
+    [todayMeals]
+  );
 
   // Weekly trend (7 days, oldest → today)
-  const weekData = Array.from({ length: 7 }, (_, i) => {
+  const weekData = useMemo(() => Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
     const dayStr = d.toDateString();
@@ -257,7 +272,7 @@ export default function HomeScreen() {
     const calories  = dayMeals.reduce((a, m) => a + (m.ai_analysis?.macros.calories ?? 0), 0);
     const raw = d.toLocaleDateString('pt-PT', { weekday: 'short' });
     return { day: raw.charAt(0).toUpperCase() + raw.slice(1, 3), calories, isToday: i === 6 };
-  });
+  }), [allMeals]);
 
   const freeMealsUsed    = Math.min(todayMeals.length, FREE_MEAL_LIMIT);
   const freeLimitReached = isFreeUser && todayMeals.length >= FREE_MEAL_LIMIT;
@@ -275,6 +290,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#3730a3' }} edges={['top']}>
+      <Toast message={toast.message} type={toast.type} visible={toast.visible} onHide={hideToast} />
       <PaywallModal
         visible={paywallVisible}
         onClose={() => setPaywallVisible(false)}

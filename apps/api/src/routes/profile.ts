@@ -23,6 +23,34 @@ const profileSchema = z.object({
   lifestyle_notes:      z.string().max(1000).trim().optional(),
 });
 
+// ── POST /profile — upsert, used after OAuth sign-in for new users ────────
+router.post('/', async (req: AuthRequest, res) => {
+  const parsed = z.object({
+    full_name: z.string().min(1).max(100).trim().optional(),
+    role:      z.enum(['client', 'nutritionist']).default('client'),
+  }).safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid data' });
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert(
+      { user_id: req.userId!, full_name: parsed.data.full_name, role: parsed.data.role, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    )
+    .select(PROFILE_COLUMNS)
+    .single();
+
+  if (error) {
+    res.status(500).json({ error: 'Failed to create profile' });
+    return;
+  }
+  res.json(data);
+});
+
 // ── GET /profile ──────────────────────────────────────────────────────────
 router.get('/', async (req: AuthRequest, res) => {
   const { data, error } = await supabase

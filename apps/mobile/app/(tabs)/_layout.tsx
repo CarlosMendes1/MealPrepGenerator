@@ -36,12 +36,24 @@ export default function TabsLayout() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Check if user needs onboarding (no goal set yet)
+  // Check if user needs onboarding (no goal set, or profile missing for OAuth users)
   useEffect(() => {
     if (!session) { setNeedsOnboarding(false); return; }
     api.get<{ goal: string | null }>('/api/profile')
       .then((p) => setNeedsOnboarding(!p.goal))
-      .catch(() => setNeedsOnboarding(false));
+      .catch(async () => {
+        // Profile missing — happens for new OAuth sign-ins.
+        // Create a minimal profile then send user to onboarding.
+        try {
+          const displayName =
+            session.user.user_metadata?.full_name ??
+            session.user.user_metadata?.name ??
+            session.user.email?.split('@')[0] ??
+            'Utilizador';
+          await api.post('/api/profile', { full_name: displayName, role: 'client' });
+        } catch { /* non-fatal */ }
+        setNeedsOnboarding(true);
+      });
   }, [session]);
 
   async function loadFeedbackCount() {

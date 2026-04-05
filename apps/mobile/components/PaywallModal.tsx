@@ -1,5 +1,5 @@
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Lock, Sparkles, Zap, ArrowRight, X, Infinity } from 'lucide-react-native';
+import { Lock, Sparkles, Zap, ArrowRight, X } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 interface Props {

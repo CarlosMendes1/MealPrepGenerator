@@ -1,11 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, RefreshControl, Image } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, Image, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageSquare, Clock } from 'lucide-react-native';
+import { router } from 'expo-router';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import { timeAgo } from '@/utils/time';
 import { MealsSkeleton } from '@/components/Skeleton';
+import Toast from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -211,13 +214,14 @@ export default function MealsScreen() {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const { toast, show: showToast, hide: hideToast } = useToast();
 
   async function load() {
     try {
       const data = await api.get<Meal[]>('/api/meals?limit=50');
       setMeals(data);
-    } catch (err) {
-      console.error('Failed to load meals:', err);
+    } catch {
+      showToast('Erro ao carregar refeições. Puxa para atualizar.', 'error');
     } finally {
       setLoading(false);
     }
@@ -255,6 +259,7 @@ export default function MealsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
+      <Toast message={toast.message} type={toast.type} visible={toast.visible} onHide={hideToast} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -263,9 +268,17 @@ export default function MealsScreen() {
           <Text className="text-2xl font-bold text-gray-900 mb-6">Histórico de refeições</Text>
 
           {grouped.length === 0 ? (
-            <View className="bg-white rounded-2xl border border-gray-100 py-12 items-center">
-              <Text className="text-4xl mb-3">📋</Text>
-              <Text className="text-gray-500 text-sm">Ainda sem refeições registadas.</Text>
+            <View className="bg-white rounded-2xl border border-gray-100 py-14 items-center px-6">
+              <Text className="text-5xl mb-4">📋</Text>
+              <Text className="text-gray-700 font-bold text-base mb-1">Ainda sem refeições</Text>
+              <Text className="text-gray-400 text-sm text-center mb-6">Regista a tua primeira refeição e começa a acompanhar o teu progresso</Text>
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/camera')}
+                className="bg-brand-600 px-6 py-3 rounded-xl"
+                style={{ shadowColor: '#4f46e5', shadowOpacity: 0.2, shadowRadius: 6, elevation: 3 }}
+              >
+                <Text className="text-white font-bold text-sm">Registar agora</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             grouped.map(({ dateKey, dateLabel, typeGroups }) => (

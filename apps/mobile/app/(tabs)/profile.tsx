@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator,
+  View, Text, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LogOut, Save, Sparkles, UserCheck, ChevronRight, Link2Off } from 'lucide-react-native';
@@ -67,6 +67,7 @@ export default function ProfileScreen() {
   }
 
   async function save() {
+    Keyboard.dismiss();
     setSaving(true);
     try {
       await api.patch('/api/profile', {

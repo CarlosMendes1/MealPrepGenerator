@@ -17,10 +17,11 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#16a34a"
+        "backgroundColor": "#4f46e5"
       },
       "package": "com.nutridesk.app",
-      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"]
+      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE", "INTERNET"],
+      "minSdkVersion": 21
     },
     "web": {
       "bundler": "metro",
@@ -41,9 +42,7 @@
     "experiments": {
       "typedRoutes": true
     },
-    "extra": {
-      "supabaseUrl": "https://xxxx.supabase.co",
-      "supabaseAnonKey": "eyJ..."
-    }
+    "extra": {}
+
   }
 }
