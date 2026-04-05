@@ -98,6 +98,72 @@ Estimate portions based on visual cues and client notes. If the client provided 
   };
 }
 
+export async function analyzeMealText(
+  clientGoal: Goal,
+  clientAge?: number | null,
+  clientWeightKg?: number | null,
+  clientNotes?: string | null
+): Promise<{ analysis: MealAnalysis; feedbackDraft: string }> {
+  const targets = DAILY_TARGETS[clientGoal];
+
+  const prompt = `You are a professional nutritionist estimating meal macros from a text description and ingredient list.
+
+Client profile:
+- Goal: ${clientGoal.replace(/_/g, ' ')}
+- Age: ${clientAge ?? 'unknown'}
+- Weight: ${clientWeightKg ? `${clientWeightKg} kg` : 'unknown'}
+- Daily targets: ${targets.calories} kcal, ${targets.protein_g}g protein, ${targets.carbs_g}g carbs, ${targets.fat_g}g fat
+
+Meal description and ingredients:
+${clientNotes ?? '(no description provided)'}
+
+If specific ingredient quantities are provided, use them as the primary source for calculations.
+For missing quantities, make reasonable estimates based on typical serving sizes.
+
+Respond in valid JSON only (no markdown, no extra text) with this exact structure:
+{
+  "analysis": {
+    "foods": [
+      {
+        "name": "food name",
+        "portion_g": 150,
+        "calories": 250,
+        "protein_g": 20,
+        "carbs_g": 30,
+        "fat_g": 8
+      }
+    ],
+    "macros": {
+      "calories": 500,
+      "protein_g": 35,
+      "carbs_g": 60,
+      "fat_g": 15,
+      "fiber_g": 5
+    },
+    "score": 7,
+    "summary": "Brief summary of what the meal contains"
+  },
+  "feedbackDraft": "Personalized feedback in Portuguese for the client about this meal in relation to their goal. Be encouraging but specific. 2-3 sentences."
+}
+
+Score (1-10): how well this meal aligns with the client's goal.`;
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1024,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const content = response.content[0];
+  if (content.type !== 'text') throw new Error('Unexpected response type from AI');
+
+  const parsed = JSON.parse(content.text);
+  return {
+    analysis: parsed.analysis as MealAnalysis,
+    feedbackDraft: parsed.feedbackDraft as string,
+  };
+}
+
 export async function generateDailySummary(
   meals: Array<{ analysis: MealAnalysis | null; meal_type: string }>,
   clientGoal: Goal,

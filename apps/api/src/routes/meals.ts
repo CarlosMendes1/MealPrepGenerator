@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import { supabase } from '../services/supabase.js';
-import { analyzeMealPhoto } from '../services/ai.js';
+import { analyzeMealPhoto, analyzeMealText } from '../services/ai.js';
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.js';
 import { generateCoachMealFeedback } from './coach.js';
 import type { Goal } from '../types/index.js';
@@ -73,20 +73,43 @@ router.post(
   requireRole('client'),
   upload.single('photo'),
   async (req: AuthRequest, res) => {
-    if (!req.file) {
-      res.status(400).json({ error: 'No photo uploaded' });
-      return;
-    }
-
     const mealType = mealTypeSchema.safeParse(req.body.meal_type);
     if (!mealType.success) {
       res.status(400).json({ error: 'meal_type must be one of: breakfast, morning_snack, lunch, afternoon_snack, dinner, supper, snack' });
       return;
     }
 
-    const clientNotes = typeof req.body.client_notes === 'string'
-      ? req.body.client_notes.trim().slice(0, 500) || null
-      : null;
+    // Parse description and structured ingredients
+    const description = typeof req.body.description === 'string'
+      ? req.body.description.trim().slice(0, 1000)
+      : (typeof req.body.client_notes === 'string' ? req.body.client_notes.trim().slice(0, 1000) : '');
+
+    interface IngredientItem { name: string; quantity: string; unit: string; }
+    let ingredients: IngredientItem[] | null = null;
+    if (typeof req.body.ingredients === 'string') {
+      try {
+        const parsed = JSON.parse(req.body.ingredients);
+        if (Array.isArray(parsed)) ingredients = parsed;
+      } catch { /* ignore malformed */ }
+    }
+
+    const hasPhoto = !!req.file;
+    const hasContent = hasPhoto || description.length > 0 || (ingredients && ingredients.length > 0);
+    if (!hasContent) {
+      res.status(400).json({ error: 'Either a photo, description, or ingredient list is required' });
+      return;
+    }
+
+    // Build rich client_notes from description + ingredients
+    const clientNotesParts: string[] = [];
+    if (description) clientNotesParts.push(description);
+    if (ingredients && ingredients.length > 0) {
+      const ingredientLines = ingredients
+        .map((i) => `- ${i.name}: ${i.quantity}${i.unit}`)
+        .join('\n');
+      clientNotesParts.push(`Ingredientes detalhados (usar como fonte primária para calcular macros):\n${ingredientLines}`);
+    }
+    const clientNotes = clientNotesParts.length > 0 ? clientNotesParts.join('\n\n') : null;
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -94,28 +117,32 @@ router.post(
       .eq('user_id', req.userId!)
       .single();
 
-    // Safe extension from whitelist — never trust user-provided extension
-    const fileExt = MIME_TO_EXT[req.file.mimetype] ?? 'jpg';
-    const fileName = `${req.userId}/${Date.now()}.${fileExt}`;
+    // Upload photo if present
+    let photoUrl: string | null = null;
+    if (hasPhoto && req.file) {
+      const fileExt = MIME_TO_EXT[req.file.mimetype] ?? 'jpg';
+      const fileName = `${req.userId}/${Date.now()}.${fileExt}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('meal-photos')
-      .upload(fileName, req.file.buffer, { contentType: req.file.mimetype });
+      const { error: uploadError } = await supabase.storage
+        .from('meal-photos')
+        .upload(fileName, req.file.buffer, { contentType: req.file.mimetype });
 
-    if (uploadError) {
-      res.status(500).json({ error: 'Failed to upload photo' });
-      return;
+      if (uploadError) {
+        res.status(500).json({ error: 'Failed to upload photo' });
+        return;
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('meal-photos')
+        .getPublicUrl(fileName);
+      photoUrl = publicUrl;
     }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('meal-photos')
-      .getPublicUrl(fileName);
 
     const { data: meal, error: mealError } = await supabase
       .from('meals')
       .insert({
         client_id: req.userId!,
-        photo_url: publicUrl,
+        photo_url: photoUrl,
         meal_type: mealType.data,
         eaten_at: new Date().toISOString(),
         client_notes: clientNotes,
@@ -130,15 +157,21 @@ router.post(
     }
 
     try {
-      const imageBase64 = req.file.buffer.toString('base64');
-      const { analysis, feedbackDraft } = await analyzeMealPhoto(
-        imageBase64,
-        req.file.mimetype,
-        (profile?.goal as Goal) ?? 'maintain',
-        profile?.age,
-        profile?.weight_kg,
-        clientNotes
-      );
+      const { analysis, feedbackDraft } = hasPhoto && req.file
+        ? await analyzeMealPhoto(
+            req.file.buffer.toString('base64'),
+            req.file.mimetype,
+            (profile?.goal as Goal) ?? 'maintain',
+            profile?.age,
+            profile?.weight_kg,
+            clientNotes
+          )
+        : await analyzeMealText(
+            (profile?.goal as Goal) ?? 'maintain',
+            profile?.age,
+            profile?.weight_kg,
+            clientNotes
+          );
 
       await supabase
         .from('meals')
@@ -150,7 +183,7 @@ router.post(
 
       res.status(201).json({ ...meal, ai_analysis: analysis, ai_feedback_draft: feedbackDraft, feedback_status: 'draft' });
     } catch (aiError) {
-      console.error('[AI] analyzeMealPhoto failed:', aiError instanceof Error ? aiError.message : aiError);
+      console.error('[AI] analysis failed:', aiError instanceof Error ? aiError.message : aiError);
       res.status(201).json({ ...meal, ai_error: 'AI analysis unavailable. Manual review required.' });
     }
   }

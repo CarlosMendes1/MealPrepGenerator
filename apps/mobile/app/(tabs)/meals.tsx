@@ -11,7 +11,7 @@ import { MealsSkeleton } from '@/components/Skeleton';
 
 interface Meal {
   id: string;
-  photo_url: string;
+  photo_url: string | null;
   meal_type: string;
   eaten_at: string;
   feedback_status: string;
@@ -69,7 +69,13 @@ function MealCard({ meal }: { meal: Meal }) {
     <View className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
       {/* Photo + macros row */}
       <View className="flex-row gap-3 p-4">
-        <Image source={{ uri: meal.photo_url }} className="w-28 h-28 rounded-xl" resizeMode="cover" />
+        {meal.photo_url ? (
+          <Image source={{ uri: meal.photo_url }} className="w-28 h-28 rounded-xl" resizeMode="cover" />
+        ) : (
+          <View className="w-28 h-28 rounded-xl bg-slate-100 items-center justify-center">
+            <Text className="text-4xl">📝</Text>
+          </View>
+        )}
 
         <View className="flex-1">
           {/* Time + status */}
