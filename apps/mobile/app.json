@@ -30,7 +30,6 @@
     "plugins": [
       "expo-router",
       "expo-camera",
-      "expo-apple-authentication",
       [
         "expo-image-picker",
         {
