@@ -142,9 +142,14 @@ export default function HomeScreen() {
 
   const totalCalories = todayMeals.reduce((acc, m) => acc + (m.ai_analysis?.macros.calories ?? 0), 0);
   const totalProtein  = todayMeals.reduce((acc, m) => acc + (m.ai_analysis?.macros.protein_g ?? 0), 0);
-  const firstName     = profile?.full_name?.split(' ')[0] ?? 'Olá';
-  const isAIMode      = !profile?.nutritionist_id;
-  const hasCoach      = profile?.ai_coach_enabled;
+  const totalCarbs    = todayMeals.reduce((acc, m) => acc + (m.ai_analysis?.macros.carbs_g   ?? 0), 0);
+  const totalFat      = todayMeals.reduce((acc, m) => acc + (m.ai_analysis?.macros.fat_g     ?? 0), 0);
+  const macroCalories = totalProtein * 4 + totalCarbs * 4 + totalFat * 9;
+  const pct = (g: number, kcalPerG: number) =>
+    macroCalories > 0 ? Math.round((g * kcalPerG / macroCalories) * 100) : 0;
+  const firstName = profile?.full_name?.split(' ')[0] ?? 'Olá';
+  const isAIMode  = !profile?.nutritionist_id;
+  const hasCoach  = profile?.ai_coach_enabled;
 
   if (loading) {
     return (
@@ -161,44 +166,65 @@ export default function HomeScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4f46e5" />}
       >
         {/* ── Hero header ───────────────────────────────────────────────── */}
-        <View className="bg-brand-600 mx-4 mt-4 rounded-3xl px-5 pt-6 pb-5 overflow-hidden"
+        <View className="bg-brand-600 mx-4 mt-5 rounded-3xl px-5 pt-7 pb-6 overflow-hidden"
           style={{ shadowColor: '#4f46e5', shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 }}>
-          {/* decorative circle */}
           <View className="absolute bg-white/10 rounded-full"
-            style={{ width: 160, height: 160, top: -40, right: -40 }} />
+            style={{ width: 180, height: 180, top: -50, right: -50 }} />
 
-          {/* greeting */}
           <Text className="text-white text-2xl font-bold tracking-tight">Olá, {firstName} 👋</Text>
-          <Text className="text-brand-200 text-sm mt-0.5">
+          <Text className="text-brand-200 text-sm mt-1">
             {new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
           </Text>
 
-          {/* mode badge */}
-          <View className="flex-row items-center gap-2 mt-4 bg-white/15 rounded-xl px-3 py-2 self-start">
-            {isAIMode
-              ? <Sparkles size={13} color="white" />
-              : <UserCheck size={13} color="white" />
-            }
+          <View className="flex-row items-center gap-2 mt-5 bg-white/15 rounded-xl px-3 py-2 self-start">
+            {isAIMode ? <Sparkles size={13} color="white" /> : <UserCheck size={13} color="white" />}
             <Text className="text-white text-xs font-semibold">
               {isAIMode ? 'NutriCoach AI' : 'Acompanhado por nutricionista'}
             </Text>
           </View>
         </View>
 
-        <View className="px-4 pt-4 pb-8 space-y-4">
+        <View className="px-4 pt-5 pb-10" style={{ gap: 16 }}>
 
-          {/* ── Stats ─────────────────────────────────────────────────── */}
+          {/* ── Stats — row 1: refeições + kcal ─────────────────────────── */}
           <View className="flex-row gap-3">
-            <StatCard label="kcal hoje"  value={totalCalories}                  color="#f97316" />
-            <StatCard label="proteína"   value={`${Math.round(totalProtein)}g`} color="#3b82f6" />
-            <StatCard label="refeições"  value={todayMeals.length}              color="#4f46e5" />
+            {/* Refeições */}
+            <View className="flex-1 bg-white rounded-2xl px-4 py-4 border border-slate-100"
+              style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 }}>
+              <Text className="text-3xl font-bold text-brand-600">{todayMeals.length}</Text>
+              <Text className="text-xs text-slate-400 font-semibold mt-1 uppercase tracking-wide">Refeições</Text>
+            </View>
+            {/* Kcal */}
+            <View className="flex-1 bg-white rounded-2xl px-4 py-4 border border-slate-100"
+              style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 }}>
+              <Text className="text-3xl font-bold text-orange-500">{Math.round(totalCalories)}</Text>
+              <Text className="text-xs text-slate-400 font-semibold mt-1 uppercase tracking-wide">kcal hoje</Text>
+            </View>
           </View>
 
-          {/* ── AI Coach CTA (only when in AI mode and no subscription) ── */}
+          {/* ── Stats — row 2: macros ────────────────────────────────────── */}
+          <View className="flex-row gap-3">
+            {[
+              { label: 'Proteína',  value: Math.round(totalProtein), pct: pct(totalProtein, 4), color: '#3b82f6', bg: '#eff6ff' },
+              { label: 'Hidratos',  value: Math.round(totalCarbs),   pct: pct(totalCarbs, 4),   color: '#f59e0b', bg: '#fffbeb' },
+              { label: 'Gordura',   value: Math.round(totalFat),     pct: pct(totalFat, 9),     color: '#ef4444', bg: '#fef2f2' },
+            ].map((m) => (
+              <View key={m.label} className="flex-1 bg-white rounded-2xl px-3 py-3.5 border border-slate-100 items-center"
+                style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 }}>
+                <View className="rounded-lg px-2 py-0.5 mb-1.5" style={{ backgroundColor: m.bg }}>
+                  <Text className="text-xs font-bold" style={{ color: m.color }}>{m.pct}%</Text>
+                </View>
+                <Text className="text-base font-bold text-slate-800">{m.value}g</Text>
+                <Text className="text-xs text-slate-400 font-medium mt-0.5">{m.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* ── AI Coach CTA ──────────────────────────────────────────────── */}
           {isAIMode && !hasCoach && (
             <TouchableOpacity
               onPress={() => router.push('/(tabs)/coach')}
-              className="bg-white rounded-2xl border border-brand-100 p-4 flex-row items-center gap-4"
+              className="bg-white rounded-2xl border border-brand-100 px-4 py-4 flex-row items-center gap-4"
               style={{ shadowColor: '#4f46e5', shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 }}
             >
               <View className="bg-brand-600 w-12 h-12 rounded-2xl items-center justify-center">
@@ -212,10 +238,10 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
 
-          {/* ── Quick action ───────────────────────────────────────────── */}
+          {/* ── Quick action ──────────────────────────────────────────────── */}
           <TouchableOpacity
             onPress={() => router.push('/(tabs)/camera')}
-            className="bg-nutrition-600 rounded-2xl p-5 flex-row items-center gap-4"
+            className="bg-nutrition-600 rounded-2xl px-5 py-5 flex-row items-center gap-4"
             style={{ shadowColor: '#059669', shadowOpacity: 0.25, shadowRadius: 8, elevation: 4 }}
           >
             <View className="bg-white/20 w-12 h-12 rounded-xl items-center justify-center">
@@ -223,28 +249,30 @@ export default function HomeScreen() {
             </View>
             <View className="flex-1">
               <Text className="text-white font-bold text-base">Registar refeição</Text>
-              <Text className="text-white/70 text-sm">Fotografa o que acabaste de comer</Text>
+              <Text className="text-white/70 text-sm mt-0.5">Fotografa o que acabaste de comer</Text>
             </View>
           </TouchableOpacity>
 
-          {/* ── Today's meals ──────────────────────────────────────────── */}
+          {/* ── Today's meals ─────────────────────────────────────────────── */}
           <View>
-            <Text className="font-bold text-slate-900 text-base mb-3">Refeições de hoje</Text>
+            <Text className="font-bold text-slate-900 text-base mb-4">Refeições de hoje</Text>
 
             {todayMeals.length === 0 ? (
-              <View className="bg-white rounded-2xl border border-slate-100 py-10 items-center"
+              <View className="bg-white rounded-2xl border border-slate-100 py-12 items-center"
                 style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 }}>
-                <Text className="text-4xl mb-3">🍽️</Text>
-                <Text className="text-slate-500 text-sm font-medium">Ainda sem refeições hoje</Text>
+                <Text className="text-5xl mb-4">🍽️</Text>
+                <Text className="text-slate-500 text-sm font-semibold">Ainda sem refeições hoje</Text>
+                <Text className="text-slate-400 text-xs mt-1 mb-5">Regista a tua primeira refeição</Text>
                 <TouchableOpacity
                   onPress={() => router.push('/(tabs)/camera')}
-                  className="mt-4 bg-brand-50 px-5 py-2.5 rounded-xl"
+                  className="bg-brand-600 px-6 py-3 rounded-xl"
+                  style={{ shadowColor: '#4f46e5', shadowOpacity: 0.2, shadowRadius: 6, elevation: 3 }}
                 >
-                  <Text className="text-brand-700 font-semibold text-sm">Registar agora</Text>
+                  <Text className="text-white font-bold text-sm">Registar agora</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <View className="space-y-3">
+              <View style={{ gap: 12 }}>
                 {todayMeals.map((meal) => <TodayMealCard key={meal.id} meal={meal} />)}
               </View>
             )}

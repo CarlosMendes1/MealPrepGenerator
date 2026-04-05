@@ -37,24 +37,30 @@ export function HomeSkeleton() {
   return (
     <View style={styles.container}>
       {/* Hero card */}
-      <SkeletonPulse height={128} radius={24} style={styles.mb4} />
+      <SkeletonPulse height={140} radius={24} style={styles.mb4} />
 
-      {/* Stats row */}
+      {/* Row 1: refeições + kcal */}
       <View style={styles.row}>
-        <SkeletonPulse height={72} radius={16} style={styles.statCard} />
-        <SkeletonPulse height={72} radius={16} style={styles.statCard} />
-        <SkeletonPulse height={72} radius={16} style={styles.statCard} />
+        <SkeletonPulse height={84} radius={16} style={styles.statCard} />
+        <SkeletonPulse height={84} radius={16} style={styles.statCard} />
+      </View>
+
+      {/* Row 2: macros */}
+      <View style={styles.row}>
+        <SkeletonPulse height={76} radius={16} style={styles.statCard} />
+        <SkeletonPulse height={76} radius={16} style={styles.statCard} />
+        <SkeletonPulse height={76} radius={16} style={styles.statCard} />
       </View>
 
       {/* CTA button */}
       <SkeletonPulse height={76} radius={20} style={styles.mb4} />
 
       {/* Section label */}
-      <SkeletonPulse height={16} width={120} radius={6} style={styles.mb3} />
+      <SkeletonPulse height={16} width={140} radius={6} style={styles.mb3} />
 
       {/* Meal cards */}
-      <SkeletonPulse height={88} radius={20} style={styles.mb3} />
-      <SkeletonPulse height={88} radius={20} style={styles.mb3} />
+      <SkeletonPulse height={96} radius={20} style={styles.mb3} />
+      <SkeletonPulse height={96} radius={20} style={styles.mb3} />
     </View>
   );
 }
