@@ -197,7 +197,7 @@ export default function HomeScreen() {
   const [paywallVisible, setPaywallVisible] = useState(false);
   const { toast, show: showToast, hide: hideToast } = useToast();
 
-  async function load() {
+  async function load(isRefresh = false) {
     const [profileResult, mealsResult] = await Promise.allSettled([
       api.get<Profile>('/api/profile'),
       api.get<Meal[]>('/api/meals?limit=100'),
@@ -205,8 +205,8 @@ export default function HomeScreen() {
 
     if (profileResult.status === 'fulfilled') {
       setProfile(profileResult.value);
-    } else {
-      showToast('Erro ao carregar perfil. Tenta novamente.', 'error');
+    } else if (isRefresh) {
+      showToast('Não foi possível atualizar o perfil.', 'error');
     }
 
     if (mealsResult.status === 'fulfilled') {
@@ -214,8 +214,8 @@ export default function HomeScreen() {
       const today = new Date().toDateString();
       setTodayMeals(mealsData.filter((m) => new Date(m.eaten_at).toDateString() === today));
       setAllMeals(mealsData);
-    } else {
-      showToast('Erro ao carregar refeições. Tenta novamente.', 'error');
+    } else if (isRefresh) {
+      showToast('Não foi possível atualizar as refeições.', 'error');
     }
 
     setLoading(false);
@@ -238,13 +238,13 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await load();
+    await load(true);
     setRefreshing(false);
   }, []);
 
   // ── Derived values (memoised) ───────────────────────────────────────────────
 
-  const firstName = profile?.full_name?.split(' ')[0] ?? 'Olá';
+  const firstName  = profile?.full_name?.split(' ')[0] ?? null;
   const isAIMode  = !profile?.nutritionist_id;
   const hasCoach  = profile?.ai_coach_enabled ?? false;
   const isFreeUser = isAIMode && !hasCoach;
@@ -312,7 +312,7 @@ export default function HomeScreen() {
           {/* Header row */}
           <View style={styles.headerRow}>
             <View>
-              <Text style={styles.greeting}>Olá, {firstName} 👋</Text>
+              <Text style={styles.greeting}>{firstName ? `Olá, ${firstName} 👋` : 'Olá 👋'}</Text>
               <Text style={styles.dateText}>
                 {new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
               </Text>
