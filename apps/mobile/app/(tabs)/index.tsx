@@ -63,6 +63,7 @@ interface Meal {
 interface Profile {
   full_name: string;
   goal: string | null;
+  calorie_target: number | null;
   nutritionist_id: string | null;
   ai_coach_enabled: boolean;
 }
@@ -248,7 +249,11 @@ export default function HomeScreen() {
   const hasCoach  = profile?.ai_coach_enabled ?? false;
   const isFreeUser = isAIMode && !hasCoach;
   const goalKey   = (profile?.goal as GoalKey | null) ?? 'maintain';
-  const targets   = DAILY_TARGETS[goalKey] ?? DAILY_TARGETS.maintain;
+  const baseTargets = DAILY_TARGETS[goalKey] ?? DAILY_TARGETS.maintain;
+  // Use user's custom calorie target if set, otherwise fall back to goal default
+  const targets   = profile?.calorie_target
+    ? { ...baseTargets, calories: profile.calorie_target }
+    : baseTargets;
 
   const { totalCalories, totalProtein, totalCarbs, totalFat } = useMemo(() => ({
     totalCalories: todayMeals.reduce((a, m) => a + (m.ai_analysis?.macros.calories  ?? 0), 0),

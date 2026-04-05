@@ -3,12 +3,22 @@ import {
   View, Text, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LogOut, Save, Sparkles, UserCheck, ChevronRight, Link2Off } from 'lucide-react-native';
+import { LogOut, Save, Sparkles, UserCheck, ChevronRight, Link2Off, Calculator } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { api } from '@/services/api';
 import { router } from 'expo-router';
 
 type Goal = 'lose_weight' | 'gain_muscle' | 'maintain' | 'improve_health';
+
+const GOAL_OFFSETS: Record<Goal, number> = {
+  lose_weight: -400, gain_muscle: +300, maintain: 0, improve_health: -200,
+};
+
+function suggestCalories(weight_kg: number, height_cm: number, age: number, goal: Goal): number {
+  const bmr  = 10 * weight_kg + 6.25 * height_cm - 5 * age - 78;
+  const tdee = Math.round((bmr * 1.4) / 50) * 50;
+  return Math.max(1200, tdee + GOAL_OFFSETS[goal]);
+}
 
 const GOALS: { key: Goal; label: string }[] = [
   { key: 'lose_weight',    label: 'Perder peso' },
@@ -24,6 +34,7 @@ interface Profile {
   height_cm: number | null;
   body_fat_pct: number | null;
   goal: Goal | null;
+  calorie_target: number | null;
   allergies: string | null;
   intolerances: string | null;
   dietary_preferences: string | null;
@@ -41,6 +52,7 @@ export default function ProfileScreen() {
   const [form, setForm] = useState({
     full_name: '', age: '', weight_kg: '', height_cm: '', body_fat_pct: '',
     goal: '' as Goal | '',
+    calorie_target: '',
     allergies: '', intolerances: '', dietary_preferences: '', lifestyle_notes: '',
   });
 
@@ -54,6 +66,7 @@ export default function ProfileScreen() {
         height_cm:           p.height_cm?.toString() ?? '',
         body_fat_pct:        p.body_fat_pct?.toString() ?? '',
         goal:                p.goal ?? '',
+        calorie_target:      p.calorie_target?.toString() ?? '',
         allergies:           p.allergies ?? '',
         intolerances:        p.intolerances ?? '',
         dietary_preferences: p.dietary_preferences ?? '',
@@ -77,6 +90,7 @@ export default function ProfileScreen() {
         height_cm:           form.height_cm ? parseFloat(form.height_cm) : undefined,
         body_fat_pct:        form.body_fat_pct ? parseFloat(form.body_fat_pct) : undefined,
         goal:                form.goal || undefined,
+        calorie_target:      form.calorie_target ? parseInt(form.calorie_target) : undefined,
         allergies:           form.allergies || undefined,
         intolerances:        form.intolerances || undefined,
         dietary_preferences: form.dietary_preferences || undefined,
@@ -267,13 +281,20 @@ export default function ProfileScreen() {
               </View>
 
               {[
-                { label: 'Idade', field: 'age' as const, unit: 'anos' },
-                { label: 'Peso',  field: 'weight_kg' as const, unit: 'kg' },
-                { label: 'Altura',field: 'height_cm' as const, unit: 'cm' },
-                { label: 'Massa gorda', field: 'body_fat_pct' as const, unit: '%' },
+                { label: 'Idade',       field: 'age' as const,         unit: 'anos', optional: false },
+                { label: 'Peso',        field: 'weight_kg' as const,   unit: 'kg',   optional: false },
+                { label: 'Altura',      field: 'height_cm' as const,   unit: 'cm',   optional: false },
+                { label: 'Massa gorda', field: 'body_fat_pct' as const, unit: '%',   optional: true  },
               ].map((input) => (
                 <View key={input.field}>
-                  <Text className="text-xs text-slate-500 font-medium mb-1.5">{input.label}</Text>
+                  <View className="flex-row items-center gap-2 mb-1.5">
+                    <Text className="text-xs text-slate-500 font-medium">{input.label}</Text>
+                    {input.optional && (
+                      <View className="bg-slate-100 rounded-full px-2 py-0.5">
+                        <Text className="text-xs text-slate-400">opcional</Text>
+                      </View>
+                    )}
+                  </View>
                   <View className="flex-row items-center bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
                     <TextInput
                       value={form[input.field]}
@@ -308,6 +329,52 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+          </View>
+
+          {/* ── Calorie target ────────────────────────────────────────── */}
+          <View className="bg-white rounded-2xl border border-slate-100 p-5 mb-4"
+            style={{ shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 }}>
+            <View className="flex-row items-center gap-2 mb-1">
+              <Calculator size={14} color="#4f46e5" />
+              <Text className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Meta calórica diária</Text>
+            </View>
+            <Text className="text-xs text-slate-400 mb-4 leading-4">
+              Define quantas calorias pretendes consumir por dia. O dashboard usa este valor para mostrar o teu progresso.
+            </Text>
+            <View className="flex-row items-center gap-3">
+              <View className="flex-1 flex-row items-center bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+                <TextInput
+                  value={form.calorie_target}
+                  onChangeText={update('calorie_target')}
+                  keyboardType="numeric"
+                  placeholder="ex: 1800"
+                  placeholderTextColor="#94a3b8"
+                  className="flex-1 px-4 py-3 text-sm text-slate-900"
+                />
+                <Text className="px-4 text-slate-400 text-sm font-medium">kcal</Text>
+              </View>
+              {form.goal && form.weight_kg && form.height_cm && form.age ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    const suggestion = suggestCalories(
+                      parseFloat(form.weight_kg), parseFloat(form.height_cm),
+                      parseInt(form.age), form.goal as Goal,
+                    );
+                    setForm((f) => ({ ...f, calorie_target: String(suggestion) }));
+                  }}
+                  className="bg-brand-50 border border-brand-200 rounded-xl px-3 py-3 items-center justify-center"
+                >
+                  <Text className="text-xs font-bold text-brand-700">Calcular</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {form.goal && form.weight_kg && form.height_cm && form.age ? (
+              <Text className="text-xs text-slate-400 mt-2">
+                Sugestão para o teu objetivo: <Text className="font-semibold text-slate-600">
+                  {suggestCalories(parseFloat(form.weight_kg), parseFloat(form.height_cm), parseInt(form.age), form.goal as Goal)} kcal
+                </Text>
+              </Text>
+            ) : null}
           </View>
 
           {/* ── Dietary restrictions ───────────────────────────────────── */}
