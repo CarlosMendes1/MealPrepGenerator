@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { Sparkles, Zap, MessageSquare, TrendingUp, Clock, Calculator } from 'lucide-react-native';
 import { api } from '@/services/api';
+
+const ONBOARDING_KEY = 'onboarding_done';
 
 type Goal = 'lose_weight' | 'gain_muscle' | 'maintain' | 'improve_health';
 
@@ -87,15 +90,18 @@ export default function OnboardingScreen() {
         goal:           form.goal || undefined,
         calorie_target: form.calorie_target ? parseInt(form.calorie_target) : undefined,
       });
-      if (!hasNutritionist) {
-        setStep(2);
-      } else {
-        router.replace('/(tabs)/');
-      }
-    } catch {
+    } catch { /* non-fatal — proceed anyway */ }
+
+    // Mark onboarding as done regardless of API outcome so the layout
+    // never redirects the user back here again.
+    await AsyncStorage.setItem(ONBOARDING_KEY, '1').catch(() => {});
+
+    setSaving(false);
+
+    if (!hasNutritionist) {
+      setStep(2);
+    } else {
       router.replace('/(tabs)/');
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -159,7 +165,13 @@ export default function OnboardingScreen() {
         <Text className="text-white font-bold text-base">Continuar</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => setStep(1)} className="mt-3 items-center py-2">
+      <TouchableOpacity
+        onPress={async () => {
+          await AsyncStorage.setItem(ONBOARDING_KEY, '1').catch(() => {});
+          setStep(1);
+        }}
+        className="mt-3 items-center py-2"
+      >
         <Text className="text-slate-400 text-sm">Preencher mais tarde</Text>
       </TouchableOpacity>
     </View>,
@@ -281,7 +293,13 @@ export default function OnboardingScreen() {
         <Text className="text-white font-bold text-base">Experimentar grátis</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.replace('/(tabs)/')} className="items-center py-3">
+      <TouchableOpacity
+        onPress={async () => {
+          await AsyncStorage.setItem(ONBOARDING_KEY, '1').catch(() => {});
+          router.replace('/(tabs)/');
+        }}
+        className="items-center py-3"
+      >
         <Text className="text-slate-400 text-sm">Ativar mais tarde</Text>
       </TouchableOpacity>
     </View>,

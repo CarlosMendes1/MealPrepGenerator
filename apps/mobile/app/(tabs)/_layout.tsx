@@ -3,10 +3,13 @@ import { Tabs, Redirect } from 'expo-router';
 import {
   ActivityIndicator, View, TouchableOpacity, StyleSheet,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Home, Camera, ClipboardList, User, Sparkles } from 'lucide-react-native';
 import { api } from '@/services/api';
 import { supabase } from '@/services/supabase';
 import type { Session } from '@supabase/supabase-js';
+
+const ONBOARDING_KEY = 'onboarding_done';
 
 function CameraTabButton({ onPress, accessibilityState }: any) {
   return (
@@ -36,24 +39,41 @@ export default function TabsLayout() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Check if user needs onboarding (no goal set, or profile missing for OAuth users)
+  // Check if user needs onboarding.
+  // Rule: skip onboarding if goal is set in the API OR if the user already
+  // completed/dismissed it in a previous session (AsyncStorage flag).
   useEffect(() => {
     if (!session) { setNeedsOnboarding(false); return; }
-    api.get<{ goal: string | null }>('/api/profile')
-      .then((p) => setNeedsOnboarding(!p.goal))
-      .catch(async () => {
-        // Profile missing — happens for new OAuth sign-ins.
-        // Create a minimal profile then send user to onboarding.
+
+    async function check() {
+      // Fast path: user already completed onboarding before
+      const done = await AsyncStorage.getItem(ONBOARDING_KEY).catch(() => null);
+      if (done === '1') { setNeedsOnboarding(false); return; }
+
+      try {
+        const p = await api.get<{ goal: string | null }>('/api/profile');
+        if (p.goal) {
+          // Goal exists — mark as done so future launches skip the check
+          await AsyncStorage.setItem(ONBOARDING_KEY, '1').catch(() => {});
+          setNeedsOnboarding(false);
+        } else {
+          setNeedsOnboarding(true);
+        }
+      } catch {
+        // Profile missing — new OAuth user. Create minimal profile, send to onboarding.
         try {
           const displayName =
-            session.user.user_metadata?.full_name ??
-            session.user.user_metadata?.name ??
-            session.user.email?.split('@')[0] ??
+            session!.user.user_metadata?.full_name ??
+            session!.user.user_metadata?.name ??
+            session!.user.email?.split('@')[0] ??
             'Utilizador';
           await api.post('/api/profile', { full_name: displayName, role: 'client' });
         } catch { /* non-fatal */ }
         setNeedsOnboarding(true);
-      });
+      }
+    }
+
+    check();
   }, [session]);
 
   async function loadFeedbackCount() {
