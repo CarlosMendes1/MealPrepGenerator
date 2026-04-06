@@ -375,6 +375,30 @@ router.post(
   }
 );
 
+// ── POST /api/billing/coach/activate-test ────────────────────────────────────
+// Development-only: activates ai_coach_enabled without Stripe.
+// In production configure STRIPE_PRICE_AI_COACH_MONTHLY and use /coach/checkout.
+router.post(
+  '/coach/activate-test',
+  requireAuth,
+  async (req: AuthRequest, res: Response) => {
+    if (process.env.NODE_ENV === 'production') {
+      res.status(403).json({ error: 'Use /coach/checkout in production' });
+      return;
+    }
+    const { error } = await supabase
+      .from('profiles')
+      .update({ ai_coach_enabled: true, updated_at: new Date().toISOString() })
+      .eq('user_id', req.userId!);
+
+    if (error) {
+      res.status(500).json({ error: 'Failed to activate coach' });
+      return;
+    }
+    res.json({ activated: true });
+  }
+);
+
 // ── POST /api/billing/webhook ─────────────────────────────────────────────────
 // Must use raw body — registered BEFORE json middleware in index.ts
 export function billingWebhookHandler(req: Request, res: Response) {

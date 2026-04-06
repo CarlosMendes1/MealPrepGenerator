@@ -10,6 +10,10 @@ import { router } from 'expo-router';
 
 type Goal = 'lose_weight' | 'gain_muscle' | 'maintain' | 'improve_health';
 
+const GOAL_CALORIE_DEFAULTS: Record<Goal, number> = {
+  lose_weight: 1600, gain_muscle: 2600, maintain: 2000, improve_health: 1900,
+};
+
 const GOAL_OFFSETS: Record<Goal, number> = {
   lose_weight: -400, gain_muscle: +300, maintain: 0, improve_health: -200,
 };
@@ -165,7 +169,8 @@ export default function ProfileScreen() {
         height_cm:           p.height_cm?.toString() ?? '',
         body_fat_pct:        p.body_fat_pct?.toString() ?? '',
         goal:                p.goal ?? '',
-        calorie_target:      p.calorie_target?.toString() ?? '',
+        calorie_target:      p.calorie_target?.toString()
+                             ?? (p.goal ? String(GOAL_CALORIE_DEFAULTS[p.goal as Goal] ?? '') : ''),
         allergies:           p.allergies ?? '',
         intolerances:        p.intolerances ?? '',
         dietary_preferences: p.dietary_preferences ?? '',
@@ -312,7 +317,7 @@ export default function ProfileScreen() {
                       onPress={() => router.push('/(tabs)/coach')}
                       className="bg-brand-600 px-3 py-2 rounded-xl flex-row items-center gap-1"
                     >
-                      <Text className="text-white text-xs font-bold">Ativar</Text>
+                      <Text className="text-white text-xs font-bold">Ver planos</Text>
                       <ChevronRight size={12} color="white" />
                     </TouchableOpacity>
                   )}

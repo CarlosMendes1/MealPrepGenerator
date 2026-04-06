@@ -9,12 +9,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
   StyleSheet,
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Sparkles, Send, Zap, Lock, ArrowRight, UserCheck } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
+import { api } from '@/services/api';
 import { router } from 'expo-router';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -106,7 +108,15 @@ const UPSELL_FEATURES: { emoji: string; title: string; subtitle: string; highlig
   { emoji: '📈', title: 'Relatórios semanais', subtitle: 'Acompanha a tua evolução ao longo do tempo' },
 ];
 
-function UpsellScreen() {
+function UpsellScreen({ onActivate }: { onActivate: () => Promise<void> }) {
+  const [activating, setActivating] = useState(false);
+
+  async function handleActivate() {
+    setActivating(true);
+    await onActivate();
+    setActivating(false);
+  }
+
   return (
     <ScrollView
       style={{ flex: 1 }}
@@ -170,16 +180,22 @@ function UpsellScreen() {
 
         <TouchableOpacity
           style={styles.upsellCta}
-          onPress={() => router.push('/(tabs)/profile')}
+          onPress={handleActivate}
+          disabled={activating}
           activeOpacity={0.85}
         >
-          <Zap size={18} color="#fff" />
-          <Text style={styles.upsellCtaText}>Ativar NutriCoach Premium</Text>
-          <ArrowRight size={18} color="#fff" />
+          {activating
+            ? <ActivityIndicator size={18} color="#fff" />
+            : <Zap size={18} color="#fff" />
+          }
+          <Text style={styles.upsellCtaText}>
+            {activating ? 'A ativar...' : 'Ativar NutriCoach Premium'}
+          </Text>
+          {!activating && <ArrowRight size={18} color="#fff" />}
         </TouchableOpacity>
 
         <Text style={styles.upsellNote}>
-          Ativa em Perfil → Modo de acompanhamento. Sem compromisso.
+          7 dias grátis, sem compromisso. Cancela quando quiseres.
         </Text>
       </View>
     </ScrollView>
@@ -389,7 +405,16 @@ export default function CoachScreen() {
   if (hasNutritionist) return <SafeAreaView style={{ flex: 1, backgroundColor: '#f9fafb' }}><BlockedScreen /></SafeAreaView>;
 
   // ── Upsell (no subscription) ──────────────────────────────────────────
-  if (!enabled) return <SafeAreaView style={{ flex: 1, backgroundColor: '#4f46e5' }} edges={['top']}><UpsellScreen /></SafeAreaView>;
+  async function activate() {
+    try {
+      await api.post('/api/billing/coach/activate-test', {});
+      setEnabled(true);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível ativar o NutriCoach. Tenta novamente.');
+    }
+  }
+
+  if (!enabled) return <SafeAreaView style={{ flex: 1, backgroundColor: '#4f46e5' }} edges={['top']}><UpsellScreen onActivate={activate} /></SafeAreaView>;
 
   // ── Chat ──────────────────────────────────────────────────────────────
   return (
