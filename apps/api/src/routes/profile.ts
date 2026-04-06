@@ -20,7 +20,7 @@ const profileSchema = z.object({
   height_cm:            z.number().min(100).max(250).optional(),
   body_fat_pct:         z.number().min(1).max(60).optional(),
   goal:                 z.enum(['lose_weight', 'gain_muscle', 'maintain', 'improve_health']).optional(),
-  calorie_target:       z.number().int().min(800).max(5000).optional(),
+  // calorie_target: z.number().int().min(800).max(5000).optional(), — re-enable after migration 008
   allergies:            z.string().max(500).trim().optional(),
   intolerances:         z.string().max(500).trim().optional(),
   dietary_preferences:  z.string().max(500).trim().optional(),
