@@ -7,11 +7,8 @@ const router = Router();
 router.use(requireAuth);
 
 // Columns safe to return — never expose internal/system fields.
-// NOTE: calorie_target is excluded until migration 008 is applied in Supabase.
-// Run: ALTER TABLE profiles ADD COLUMN IF NOT EXISTS calorie_target integer CHECK (calorie_target BETWEEN 800 AND 5000);
-// Then add calorie_target back to this list.
 const PROFILE_COLUMNS =
-  'user_id, role, full_name, age, weight_kg, height_cm, body_fat_pct, goal, allergies, intolerances, dietary_preferences, lifestyle_notes, nutritionist_id, ai_coach_enabled, created_at, updated_at';
+  'user_id, role, full_name, age, weight_kg, height_cm, body_fat_pct, goal, calorie_target, allergies, intolerances, dietary_preferences, lifestyle_notes, nutritionist_id, ai_coach_enabled, created_at, updated_at';
 
 const profileSchema = z.object({
   full_name:            z.string().min(1).max(100).trim().optional(),
@@ -20,7 +17,7 @@ const profileSchema = z.object({
   height_cm:            z.number().min(100).max(250).optional(),
   body_fat_pct:         z.number().min(1).max(60).optional(),
   goal:                 z.enum(['lose_weight', 'gain_muscle', 'maintain', 'improve_health']).optional(),
-  // calorie_target: z.number().int().min(800).max(5000).optional(), — re-enable after migration 008
+  calorie_target:       z.number().int().min(800).max(5000).optional(),
   allergies:            z.string().max(500).trim().optional(),
   intolerances:         z.string().max(500).trim().optional(),
   dietary_preferences:  z.string().max(500).trim().optional(),
