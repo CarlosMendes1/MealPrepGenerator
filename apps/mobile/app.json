@@ -20,7 +20,7 @@
         "backgroundColor": "#4f46e5"
       },
       "package": "com.nutridesk.app",
-      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE", "INTERNET"],
+      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE", "INTERNET", "RECEIVE_BOOT_COMPLETED", "SCHEDULE_EXACT_ALARM", "USE_EXACT_ALARM"],
       "minSdkVersion": 21
     },
     "web": {
@@ -30,6 +30,14 @@
     "plugins": [
       "expo-router",
       "expo-camera",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#4f46e5",
+          "sounds": []
+        }
+      ],
       [
         "expo-image-picker",
         {

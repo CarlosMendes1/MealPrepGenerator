@@ -7,6 +7,7 @@ import { LogOut, Save, Sparkles, UserCheck, ChevronRight, Link2Off, Calculator, 
 import { supabase } from '@/services/supabase';
 import { api } from '@/services/api';
 import { router } from 'expo-router';
+import { RemindersSection } from '@/components/RemindersSection';
 
 type Goal = 'lose_weight' | 'gain_muscle' | 'maintain' | 'improve_health';
 
@@ -524,6 +525,9 @@ export default function ProfileScreen() {
               ))}
             </View>
           </View>
+
+          {/* ── Reminders ────────────────────────────────────────────── */}
+          <RemindersSection />
 
           {/* ── Save ─────────────────────────────────────────────────── */}
           <TouchableOpacity
