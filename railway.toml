@@ -1,0 +1,13 @@
+# ─── Railway — API service ─────────────────────────────────────────────────────
+# Railway picks up this file automatically from the repo root (or the service
+# source directory if you configure one in the Railway dashboard).
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "apps/api/Dockerfile"
+
+[deploy]
+healthcheckPath = "/healthz"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
