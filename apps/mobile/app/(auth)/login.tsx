@@ -4,7 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Keyboard,
 } from 'react-native';
 import { Link, router } from 'expo-router';
-import { Sparkles } from 'lucide-react-native';
+import { Sparkles, Eye, EyeOff } from 'lucide-react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Linking from 'expo-linking';
@@ -50,9 +50,10 @@ function AppleIcon() {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function LoginScreen() {
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading]   = useState(false);
+  const [email, setEmail]           = useState('');
+  const [password, setPassword]     = useState('');
+  const [showPassword, setShowPass] = useState(false);
+  const [loading, setLoading]       = useState(false);
   const { toast, show: showToast, hide: hideToast } = useToast();
 
   // ── Email/password ──────────────────────────────────────────────────────
@@ -202,14 +203,27 @@ export default function LoginScreen() {
             </View>
             <View>
               <Text style={styles.fieldLabel}>Palavra-passe</Text>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                placeholder="••••••••"
-                placeholderTextColor="#94a3b8"
-                style={styles.input}
-              />
+              <View style={styles.passwordWrapper}>
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor="#94a3b8"
+                  style={[styles.input, styles.passwordInput]}
+                />
+                <TouchableOpacity
+                  style={styles.eyeBtn}
+                  onPress={() => setShowPass((v) => !v)}
+                  accessibilityLabel={showPassword ? 'Ocultar palavra-passe' : 'Mostrar palavra-passe'}
+                  accessibilityRole="button"
+                >
+                  {showPassword
+                    ? <EyeOff size={18} color="#94a3b8" />
+                    : <Eye size={18} color="#94a3b8" />
+                  }
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
@@ -325,6 +339,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0',
     borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14,
     fontSize: 15, color: '#0f172a',
+  },
+  passwordWrapper: { position: 'relative' },
+  passwordInput:  { paddingRight: 48 },
+  eyeBtn: {
+    position: 'absolute', right: 14, top: 0, bottom: 0,
+    justifyContent: 'center', alignItems: 'center',
+    width: 36, minHeight: 44,
   },
   forgotText: { fontSize: 13, color: '#4f46e5', fontWeight: '600' },
 

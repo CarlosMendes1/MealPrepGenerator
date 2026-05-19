@@ -4,12 +4,13 @@ import {
   KeyboardAvoidingView, Platform, ScrollView, Alert, Keyboard,
 } from 'react-native';
 import { Link, router } from 'expo-router';
-import { Sparkles } from 'lucide-react-native';
+import { Sparkles, Eye, EyeOff } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { api } from '@/services/api';
 
 export default function RegisterScreen() {
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [form, setForm]             = useState({ name: '', email: '', password: '' });
+  const [showPassword, setShowPass] = useState(false);
   const [inviteCode, setInviteCode]           = useState('');
   const [hasNutritionist, setHasNutritionist] = useState<boolean | null>(null);
   const [loading, setLoading]                 = useState(false);
@@ -104,11 +105,12 @@ export default function RegisterScreen() {
 
           {/* Basic fields */}
           <View className="space-y-4 mb-6">
-            {[
-              { label: 'Nome', field: 'name' as const, placeholder: 'O teu nome', type: 'default' },
-              { label: 'Email', field: 'email' as const, placeholder: 'o.teu@email.com', type: 'email-address' },
-              { label: 'Palavra-passe', field: 'password' as const, placeholder: '••••••••', type: 'default', secure: true },
-            ].map((input) => (
+            {(
+              [
+                { label: 'Nome', field: 'name' as const, placeholder: 'O teu nome', type: 'default' },
+                { label: 'Email', field: 'email' as const, placeholder: 'o.teu@email.com', type: 'email-address' },
+              ] as const
+            ).map((input) => (
               <View key={input.field}>
                 <Text className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{input.label}</Text>
                 <TextInput
@@ -116,13 +118,43 @@ export default function RegisterScreen() {
                   onChangeText={update(input.field)}
                   keyboardType={input.type as any}
                   autoCapitalize={input.field === 'name' ? 'words' : 'none'}
-                  secureTextEntry={input.secure}
                   placeholder={input.placeholder}
                   placeholderTextColor="#94a3b8"
                   className="bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-base text-slate-900"
                 />
               </View>
             ))}
+
+            {/* Password with show/hide toggle */}
+            <View>
+              <Text className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Palavra-passe</Text>
+              <View style={{ position: 'relative' }}>
+                <TextInput
+                  value={form.password}
+                  onChangeText={update('password')}
+                  secureTextEntry={!showPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor="#94a3b8"
+                  className="bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-base text-slate-900"
+                  style={{ paddingRight: 48 }}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPass((v) => !v)}
+                  style={{
+                    position: 'absolute', right: 14, top: 0, bottom: 0,
+                    justifyContent: 'center', alignItems: 'center',
+                    width: 36, minHeight: 44,
+                  }}
+                  accessibilityLabel={showPassword ? 'Ocultar palavra-passe' : 'Mostrar palavra-passe'}
+                  accessibilityRole="button"
+                >
+                  {showPassword
+                    ? <EyeOff size={18} color="#94a3b8" />
+                    : <Eye size={18} color="#94a3b8" />
+                  }
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
 
           {/* Nutritionist question */}

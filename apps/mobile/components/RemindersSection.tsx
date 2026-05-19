@@ -112,6 +112,8 @@ export function RemindersSection() {
               style={styles.timePill}
               onPress={() => openPicker(r)}
               activeOpacity={0.7}
+              accessibilityLabel={`Alterar hora do ${r.label}: ${formatTime(r.hour, r.minute)}`}
+              accessibilityRole="button"
             >
               <Text style={styles.timeText}>{formatTime(r.hour, r.minute)}</Text>
             </TouchableOpacity>
@@ -220,7 +222,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#eef2ff',
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   timeText: {
     fontSize: 13,

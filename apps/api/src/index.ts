@@ -107,9 +107,8 @@ const coachLimiter = rateLimit({
 app.use(globalLimiter);
 
 // ── Health check (unauthenticated, no rate limit side-effect) ─────────────
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'nutridesk-api', timestamp: new Date().toISOString() });
-});
+app.get('/health',  (_req, res) => res.json({ status: 'ok', service: 'nutridesk-api', ts: Date.now() }));
+app.get('/healthz', (_req, res) => res.json({ status: 'ok', service: 'nutridesk-api', ts: Date.now() }));
 
 // ── Routes ────────────────────────────────────────────────────────────────
 app.use('/api/profile', profileRouter);
@@ -134,8 +133,24 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Internal server error', requestId });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`NutriDesk API running on port ${PORT} [${IS_PROD ? 'production' : 'development'}]`);
 });
+
+function shutdown(signal: string) {
+  console.log(`[shutdown] ${signal} received — closing server`);
+  server.close(() => {
+    console.log('[shutdown] HTTP server closed');
+    process.exit(0);
+  });
+  // Force-exit if graceful shutdown takes too long
+  setTimeout(() => {
+    console.error('[shutdown] Timeout — forcing exit');
+    process.exit(1);
+  }, 10_000).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
 
 export default app;

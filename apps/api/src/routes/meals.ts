@@ -84,12 +84,18 @@ router.post(
       ? req.body.description.trim().slice(0, 1000)
       : (typeof req.body.client_notes === 'string' ? req.body.client_notes.trim().slice(0, 1000) : '');
 
-    interface IngredientItem { name: string; quantity: string; unit: string; }
+    const ingredientItemSchema = z.object({
+      name:     z.string().min(1).max(200),
+      quantity: z.string().min(1).max(50),
+      unit:     z.string().min(1).max(30),
+    });
+    type IngredientItem = z.infer<typeof ingredientItemSchema>;
     let ingredients: IngredientItem[] | null = null;
     if (typeof req.body.ingredients === 'string') {
       try {
         const parsed = JSON.parse(req.body.ingredients);
-        if (Array.isArray(parsed)) ingredients = parsed;
+        const result = z.array(ingredientItemSchema).max(50).safeParse(parsed);
+        if (result.success) ingredients = result.data;
       } catch { /* ignore malformed */ }
     }
 
