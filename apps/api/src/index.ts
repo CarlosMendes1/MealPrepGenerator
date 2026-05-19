@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { logger } from './lib/logger.js';
 
 // ── Fail fast on missing required config ──────────────────────────────────────
 const REQUIRED_ENV = [
@@ -14,7 +15,7 @@ const REQUIRED_ENV = [
 
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
-    console.error(`[startup] Missing required environment variable: ${key}`);
+    logger.error(`Missing required environment variable: ${key}`);
     process.exit(1);
   }
 }
@@ -123,29 +124,22 @@ app.use('/api/coach', coachLimiter, coachRouter);
 // ── Global error handler — never leak stack traces to clients ─────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const requestId = crypto.randomUUID();
-  // Structured log for observability tools (Datadog, Logtail, etc.)
-  console.error(JSON.stringify({
-    requestId,
-    message: err.message,
-    stack: IS_PROD ? undefined : err.stack,
-    timestamp: new Date().toISOString(),
-  }));
+  logger.error(err.message, { requestId, stack: IS_PROD ? undefined : err.stack });
   res.status(500).json({ error: 'Internal server error', requestId });
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`NutriDesk API running on port ${PORT} [${IS_PROD ? 'production' : 'development'}]`);
+  logger.info(`NutriDesk API running on port ${PORT}`, { env: IS_PROD ? 'production' : 'development' });
 });
 
 function shutdown(signal: string) {
-  console.log(`[shutdown] ${signal} received — closing server`);
+  logger.info(`${signal} received — closing server`);
   server.close(() => {
-    console.log('[shutdown] HTTP server closed');
+    logger.info('HTTP server closed');
     process.exit(0);
   });
-  // Force-exit if graceful shutdown takes too long
   setTimeout(() => {
-    console.error('[shutdown] Timeout — forcing exit');
+    logger.error('Shutdown timeout — forcing exit');
     process.exit(1);
   }, 10_000).unref();
 }

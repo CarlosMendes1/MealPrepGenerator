@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { Sparkles, Eye, EyeOff } from 'lucide-react-native';
+import Button from '@/components/ui/Button';
 import { supabase } from '@/services/supabase';
 import { api } from '@/services/api';
 
@@ -203,16 +204,12 @@ export default function RegisterScreen() {
             )}
           </View>
 
-          <TouchableOpacity
+          <Button
+            label="Criar conta"
             onPress={signUp}
-            disabled={loading}
-            className="bg-brand-600 rounded-xl py-4 items-center mb-6"
-            style={{ shadowColor: '#4f46e5', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }}
-          >
-            <Text className="text-white font-bold text-base">
-              {loading ? 'A criar conta...' : 'Criar conta'}
-            </Text>
-          </TouchableOpacity>
+            loading={loading}
+            style={{ marginBottom: 24 }}
+          />
 
           <View className="flex-row justify-center">
             <Text className="text-slate-400 text-sm">Já tens conta? </Text>

@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { Sparkles, Zap, MessageSquare, TrendingUp, Clock, Calculator } from 'lucide-react-native';
 import { api } from '@/services/api';
+import Button from '@/components/ui/Button';
 
 const ONBOARDING_KEY = 'onboarding_done';
 
@@ -157,13 +158,7 @@ export default function OnboardingScreen() {
         💡 Não sabes a tua massa gorda? Não há problema — deixa em branco. Só o peso e a altura são suficientes para boas estimativas.
       </Text>
 
-      <TouchableOpacity
-        onPress={() => setStep(1)}
-        className="bg-brand-600 rounded-xl py-4 mt-6 items-center"
-        style={{ shadowColor: '#4f46e5', shadowOpacity: 0.25, shadowRadius: 8, elevation: 4 }}
-      >
-        <Text className="text-white font-bold text-base">Continuar</Text>
-      </TouchableOpacity>
+      <Button label="Continuar" onPress={() => setStep(1)} style={{ marginTop: 24 }} />
 
       <TouchableOpacity
         onPress={async () => {
@@ -238,16 +233,12 @@ export default function OnboardingScreen() {
         </View>
       ) : null}
 
-      <TouchableOpacity
+      <Button
+        label="Continuar"
         onPress={finish}
-        disabled={!form.goal || saving}
-        className={`rounded-xl py-4 items-center ${form.goal ? 'bg-brand-600' : 'bg-slate-200'}`}
-        style={form.goal ? { shadowColor: '#4f46e5', shadowOpacity: 0.25, shadowRadius: 8, elevation: 4 } : {}}
-      >
-        <Text className={`font-bold text-base ${form.goal ? 'text-white' : 'text-slate-400'}`}>
-          {saving ? 'A guardar...' : 'Continuar'}
-        </Text>
-      </TouchableOpacity>
+        loading={saving}
+        disabled={!form.goal}
+      />
     </View>,
 
     // ── Step 2: Coach upsell (only for non-nutritionist users) ────────────
@@ -285,23 +276,19 @@ export default function OnboardingScreen() {
         </View>
       </View>
 
-      <TouchableOpacity
+      <Button
+        label="Experimentar grátis"
         onPress={() => router.replace('/(tabs)/coach')}
-        className="bg-brand-600 rounded-xl py-4 items-center mb-3"
-        style={{ shadowColor: '#4f46e5', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }}
-      >
-        <Text className="text-white font-bold text-base">Experimentar grátis</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
+        style={{ marginBottom: 12 }}
+      />
+      <Button
+        label="Ativar mais tarde"
+        variant="ghost"
         onPress={async () => {
           await AsyncStorage.setItem(ONBOARDING_KEY, '1').catch(() => {});
           router.replace('/(tabs)/');
         }}
-        className="items-center py-3"
-      >
-        <Text className="text-slate-400 text-sm">Ativar mais tarde</Text>
-      </TouchableOpacity>
+      />
     </View>,
   ];
 
@@ -309,14 +296,19 @@ export default function OnboardingScreen() {
     <ScrollView className="flex-1 bg-slate-50" contentContainerStyle={{ flexGrow: 1 }} bounces={false}>
       <View className="flex-1 px-6 pt-14 pb-8">
 
-        {/* Progress bar */}
-        <View className="flex-row gap-2 mb-10">
-          {Array.from({ length: totalSteps }).map((_, i) => (
-            <View
-              key={i}
-              className={`h-1 flex-1 rounded-full ${i <= step ? 'bg-brand-500' : 'bg-slate-200'}`}
-            />
-          ))}
+        {/* Progress bar + step counter */}
+        <View className="mb-10">
+          <View className="flex-row gap-2 mb-2">
+            {Array.from({ length: totalSteps }).map((_, i) => (
+              <View
+                key={i}
+                className={`h-1.5 flex-1 rounded-full ${i <= step ? 'bg-brand-500' : 'bg-slate-200'}`}
+              />
+            ))}
+          </View>
+          <Text className="text-xs text-slate-400 text-right font-medium">
+            Passo {step + 1} de {totalSteps}
+          </Text>
         </View>
 
         {steps[step]}

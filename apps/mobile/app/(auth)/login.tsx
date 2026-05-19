@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { Sparkles, Eye, EyeOff } from 'lucide-react-native';
+import Button from '@/components/ui/Button';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Linking from 'expo-linking';
@@ -233,16 +234,12 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </Link>
 
-          <TouchableOpacity
+          <Button
+            label="Entrar"
             onPress={signIn}
-            disabled={loading}
+            loading={loading}
             style={styles.primaryBtn}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.primaryBtnText}>
-              {loading ? 'A entrar...' : 'Entrar'}
-            </Text>
-          </TouchableOpacity>
+          />
 
           <View style={styles.registerRow}>
             <Text style={styles.registerText}>Não tens conta? </Text>
